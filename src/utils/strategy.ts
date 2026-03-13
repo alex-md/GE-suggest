@@ -1,8 +1,15 @@
-import { calculateEMA, calculateRSI, calculateSMA, calculateVolatility, calculateLiquidity } from './indicators';
+import {
+    calculateAverageNotionalVolume,
+    calculateAverageVolume,
+    calculateEMA,
+    calculateRSI,
+    calculateSMA,
+    calculateVolatility
+} from './indicators';
 import type { DailyPoint } from './indicators';
 
 const TAX_RATE = 0.02;
-const TAX_CAP = 5000000;
+const TAX_CAP = 5_000_000;
 
 export interface StrategyResult {
     decision: string;
@@ -13,61 +20,118 @@ export interface StrategyResult {
         discountPct: number;
         taxBasis: number;
         netReturn: number;
+        flipMarginAfterTax: number;
         rsi: number;
         emaShort: number;
         emaLong: number;
         volatility: number;
         vsAveragePct: number;
-        targetLimit: number;
-        volume: number; // Daily Volume (items)
-        liquidity: number; // Daily Volume (GP)
+        instantBuyPrice: number;
+        instantSellPrice: number;
+        spread: number;
+        spreadPct: number;
+        geLimit: number;
+        dailyVolumeItems: number;
+        dailyVolumeNotional: number;
+        fillsPerLimit: number;
         liquidityState: "Illiquid" | "Low" | "Medium" | "High";
     };
     suggestedPrice: number;
     suggestedPriceLabel: string;
 }
 
+function calculateTax(price: number): number {
+    return Math.min(Math.floor(price * TAX_RATE), TAX_CAP);
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
+function average(values: number[]): number {
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getLiquidityState(fillsPerLimit: number, dailyVolumeItems: number): StrategyResult["metrics"]["liquidityState"] {
+    if (dailyVolumeItems < 1 || fillsPerLimit < 0.25) return "Illiquid";
+    if (fillsPerLimit < 1) return "Low";
+    if (fillsPerLimit < 4) return "Medium";
+    return "High";
+}
+
+function getBuyAggression(decision: string, liquidityState: StrategyResult["metrics"]["liquidityState"], hasPositiveFlipEdge: boolean): number {
+    const baseAggression: Record<string, number> = {
+        "SCREAMING BUY": 0.9,
+        "MOMENTUM BUY": 0.82,
+        "STRONG BUY": 0.72,
+        "ACCUMULATE": 0.58,
+        "BUY": 0.62,
+        "BUY DIP": 0.48,
+        "WATCH": 0.28,
+        "WAIT": 0.14
+    };
+
+    let aggression = baseAggression[decision] ?? 0.45;
+
+    if (!hasPositiveFlipEdge) aggression = Math.min(aggression, 0.35);
+    if (liquidityState === "Illiquid") aggression = Math.min(aggression, 0.2);
+    else if (liquidityState === "Low") aggression = Math.min(aggression, 0.45);
+    else if (liquidityState === "High" && hasPositiveFlipEdge) aggression = Math.min(0.95, aggression + 0.08);
+
+    return aggression;
+}
+
+function getSellPatience(decision: string, liquidityState: StrategyResult["metrics"]["liquidityState"]): number {
+    const basePatience: Record<string, number> = {
+        "PANIC SELL": 0.08,
+        "CUT LOSSES": 0.12,
+        "MANIC SELL": 0.78,
+        "SELL NOW": 0.7,
+        "RIDE TREND": 0.9,
+        "LIST": 0.58
+    };
+
+    let patience = basePatience[decision] ?? 0.55;
+
+    if (liquidityState === "Illiquid") patience = Math.min(patience, 0.45);
+    else if (liquidityState === "Low") patience = Math.min(patience, 0.6);
+
+    return patience;
+}
+
 export function analyzeItemData(
-    currentPrice: number,
-    targetLimit: number,
+    instantBuyPrice: number,
+    instantSellPrice: number,
+    geLimit: number,
     dailyPoints: DailyPoint[],
     isBuying: boolean
 ): StrategyResult {
-    // 1. Calculate Metrics
+    const safeInstantBuy = Math.max(1, instantBuyPrice || 0);
+    const safeInstantSell = Math.max(1, instantSellPrice || 0);
+    const marketPrice = isBuying ? safeInstantBuy : safeInstantSell;
+    const spread = Math.max(0, safeInstantBuy - safeInstantSell);
+    const spreadPct = safeInstantSell > 0 ? (spread / safeInstantSell) * 100 : 0;
 
-    // A. Discount Factor (Buying)
-    // High 30d
-    const highs = dailyPoints.map(d => d.avgHighPrice ?? 0);
-    const high30d = Math.max(...highs);
-    const discountPct = high30d > 0 ? ((high30d - currentPrice) / high30d) * 100 : 0;
+    const highs = dailyPoints.map(point => point.avgHighPrice ?? 0);
+    const high30d = Math.max(...highs, 0);
+    const discountPct = high30d > 0 ? ((high30d - marketPrice) / high30d) * 100 : 0;
 
-    // B. Profit/Tax (Selling)
-    const taxBasis = Math.min(Math.floor(currentPrice * TAX_RATE), TAX_CAP);
-    const netReturn = currentPrice - taxBasis;
+    const taxBasis = calculateTax(marketPrice);
+    const netReturn = marketPrice - taxBasis;
+    const flipMarginAfterTax = safeInstantBuy - safeInstantSell - calculateTax(safeInstantBuy);
 
-    // C. Technical Indicators
     const rsi14 = calculateRSI(dailyPoints, 14);
     const ema12 = calculateEMA(dailyPoints, 12);
     const ema26 = calculateEMA(dailyPoints, 26);
     const volatility = calculateVolatility(dailyPoints, 7);
-    const liquidity = calculateLiquidity(dailyPoints, currentPrice);
-
-    // Liquidity Thresholds (Daily GP Volume)
-    let liquidityState: StrategyResult["metrics"]["liquidityState"] = "Medium";
-    if (liquidity < 50_000_000) liquidityState = "Illiquid";
-    else if (liquidity < 250_000_000) liquidityState = "Low";
-    else if (liquidity > 1_000_000_000) liquidityState = "High";
-
-    // E. Volume
-    // Average volume over 7 days for context
-    const volume7d = liquidity / currentPrice; // Approximation based on current price, or we could calculateAverageVolume separately.
-    // Let's use the helper if we want exact item volume, but liquidity is better for strategy.
-
-    // D. Value vs Average (SMA)
     const sma7 = calculateSMA(dailyPoints, 7);
-    const vsAveragePct = sma7 > 0 ? ((currentPrice - sma7) / sma7) * 100 : 0;
+    const vsAveragePct = sma7 > 0 ? ((marketPrice - sma7) / sma7) * 100 : 0;
 
-    // 2. Analyze Intention
+    const dailyVolumeItems = calculateAverageVolume(dailyPoints, 7, isBuying ? "low" : "high");
+    const dailyVolumeNotional = calculateAverageNotionalVolume(dailyPoints, 7, isBuying ? "low" : "high");
+    const fillsPerLimit = geLimit > 0 ? dailyVolumeItems / geLimit : 0;
+    const liquidityState = getLiquidityState(fillsPerLimit, dailyVolumeItems);
+
     let decision = "WAIT";
     let subtext = "Checking...";
     const reasons: string[] = [];
@@ -76,189 +140,176 @@ export function analyzeItemData(
     const isRising = ema12 > ema26;
     const isOversold = rsi14 < 30;
     const isAccumulation = rsi14 >= 30 && rsi14 < 45;
-    // const isNeutral = rsi14 >= 45 && rsi14 <= 55; // Unused
     const isMomentum = rsi14 > 55 && rsi14 <= 80;
     const isOverbought = rsi14 > 80;
-
     const isStable = volatility < 0.02;
-    // const isVolatile = volatility > 0.08; // Unused, but concept is used in logic below via 'volatility' check
-
     const isBreakout = vsAveragePct > 10;
     const isCrash = vsAveragePct < -10;
+    const hasPositiveFlipEdge = flipMarginAfterTax > 0;
+
+    if (liquidityState === "Illiquid") {
+        reasons.push(`Passive fills average only ${Math.round(dailyVolumeItems).toLocaleString()} items/day (${fillsPerLimit.toFixed(2)}x limit/day)`);
+    } else if (liquidityState === "Low") {
+        reasons.push(`Fill rate is modest at ${Math.round(dailyVolumeItems).toLocaleString()} items/day (${fillsPerLimit.toFixed(2)}x limit/day)`);
+    }
+
+    if (isBuying && !hasPositiveFlipEdge) {
+        reasons.push(`Live spread is ${spread.toLocaleString()} gp, which does not clear the 2% GE tax`);
+    }
 
     if (isBuying) {
-        if (liquidityState === "Illiquid") {
-            // Safety override for illiquid items
-            reasons.push(`Warning: Item is Illiquid (${(liquidity / 1000000).toFixed(1)}M GP/day). Limit orders may take days to fill`);
+        if (!hasPositiveFlipEdge && !isOversold && !isCrash) {
+            decision = "WAIT";
+            subtext = "Tax Locked";
+            reasons.push("Current spread is too thin for a realistic flip entry");
+            color = "red";
         }
-
-        if (isOversold && liquidityState !== "Illiquid") {
+        else if (isOversold && liquidityState !== "Illiquid" && hasPositiveFlipEdge) {
             decision = "SCREAMING BUY";
             subtext = "Deep Value";
-            reasons.push(`Market is extremely oversold (RSI: ${rsi14.toFixed(0)} < 30). High potential for mean reversion`);
+            reasons.push(`Market is extremely oversold (RSI ${rsi14.toFixed(0)}) with room above tax`);
             color = "green";
         }
-        else if (isAccumulation && isStable) {
+        else if (isAccumulation && isStable && hasPositiveFlipEdge) {
             decision = "ACCUMULATE";
             subtext = "Accumulate";
-            reasons.push(`Price is low (RSI: ${rsi14.toFixed(0)}) and stable. Good environment for patient accumulation`);
+            reasons.push(`Price is stable with RSI ${rsi14.toFixed(0)} and a tradeable spread`);
             color = "green";
         }
-        else if (isBreakout && isRising && liquidityState !== "Illiquid") {
+        else if (isBreakout && isRising && liquidityState !== "Illiquid" && hasPositiveFlipEdge) {
             decision = "MOMENTUM BUY";
             subtext = "Breakout";
-            reasons.push(`Price is breaking out (+${vsAveragePct.toFixed(1)}% vs Avg). Enter now to catch the pump`);
+            reasons.push(`Trend is breaking out at +${vsAveragePct.toFixed(1)}% vs 7d average`);
             color = "green";
         }
-        else if (isAccumulation && vsAveragePct < -2) {
+        else if (isAccumulation && vsAveragePct < -2 && hasPositiveFlipEdge) {
             decision = "STRONG BUY";
             subtext = "Undervalued";
-            reasons.push(`Price is undervalued (Score: ${rsi14.toFixed(0)}) and below weekly average`);
+            reasons.push("Price is below the weekly average and still clears tax");
             color = "green";
         }
-        else if (isRising && !isOverbought && !isMomentum) {
+        else if (isRising && !isOverbought && !isMomentum && hasPositiveFlipEdge) {
             decision = "BUY";
             subtext = "Trend Up";
-            reasons.push("Enter position. Trend is positive and price is reasonable");
+            reasons.push("Momentum is positive and the live spread remains workable");
             color = "green";
         }
-        else if (discountPct > 15 && isRising) {
+        else if (discountPct > 15 && isRising && hasPositiveFlipEdge) {
             decision = "BUY DIP";
             subtext = "Recovering";
-            reasons.push(`Buy the dip. Recovering from 15%+ discount`);
+            reasons.push("Price is rebounding from a meaningful discount without giving up the edge to tax");
             color = "green";
         }
         else if (isOverbought) {
             decision = "WAIT";
             subtext = "Overextended";
-            reasons.push(`Do not buy. RSI is ${rsi14.toFixed(0)} (Overbought). Wait for a correction`);
+            reasons.push(`RSI is ${rsi14.toFixed(0)}. Let the market cool before chasing`);
             color = "red";
         }
         else if (vsAveragePct > 5) {
             decision = "WAIT";
             subtext = "Inflated";
-            reasons.push(`Current price is 5% above weekly average`);
+            reasons.push("Current price is stretched above the recent average");
             color = "red";
         }
         else {
             decision = "WATCH";
-            subtext = "Stable";
-            reasons.push("Market is neutral. Place passive bids");
+            subtext = "Passive";
+            reasons.push("Set a patient bid near the live spread instead of paying up");
             color = "yellow";
         }
     } else {
-        if (liquidityState === "Illiquid") {
-            reasons.push(`Warning: Item is Illiquid. Exiting may be difficult. Prioritize filling orders over squeezing profit`);
-        }
-
         if (isOverbought) {
             decision = "MANIC SELL";
             subtext = "Overextended";
-            reasons.push(`RSI is ${rsi14.toFixed(0)} (>80). Price is likely unsustainable. Exit now`);
+            reasons.push(`RSI is ${rsi14.toFixed(0)} and buyers are likely overpaying`);
             color = "green";
         }
         else if (isCrash) {
             decision = "PANIC SELL";
             subtext = "Crash";
-            reasons.push(`Price has collapsed (-${Math.abs(vsAveragePct).toFixed(1)}% vs Avg). Liquidity danger`);
+            reasons.push(`Price is down ${Math.abs(vsAveragePct).toFixed(1)}% vs the 7d average`);
             color = "red";
         }
         else if ((isMomentum || isRising) && rsi14 <= 75) {
             decision = "RIDE TREND";
             subtext = "Momentum";
-            reasons.push(`Trend is strong (RSI ${rsi14.toFixed(0)}). Hold for max profit but set trailing stops`);
+            reasons.push(`Trend is still constructive (RSI ${rsi14.toFixed(0)})`);
             color = "green";
         }
         else if (isMomentum && !isRising) {
             decision = "SELL NOW";
-            subtext = "Peak Profit";
-            reasons.push(`Price is high (Score: ${rsi14.toFixed(0)}). Good time to take profit`);
+            subtext = "Take Profit";
+            reasons.push("Momentum remains elevated but trend follow-through is fading");
             color = "green";
         }
         else if (!isRising && (isOversold || isAccumulation)) {
             decision = "CUT LOSSES";
-            subtext = "Price Falling";
-            reasons.push("Trend is negative and price is dropping. Sell to preserve capital");
+            subtext = "Falling";
+            reasons.push("Trend has weakened and the price action is not recovering");
             color = "red";
         }
         else {
             decision = "LIST";
-            subtext = "Hold / List";
-            reasons.push("List at competitive Ask. Strategy is neutral");
+            subtext = "Neutral";
+            reasons.push("List inside the spread and make buyers meet your price");
             color = "yellow";
         }
     }
 
-    // 3. Calculate Suggested Price
-    let suggestedPrice = currentPrice;
-    let suggestedPriceLabel = "Limit Price";
+    const fairValueInputs = [sma7, ema12, ema26].filter(value => value > 0);
+    const fairValue = fairValueInputs.length > 0
+        ? average(fairValueInputs)
+        : average([safeInstantBuy, safeInstantSell].filter(value => value > 0));
+
+    let suggestedPrice = marketPrice;
+    let suggestedPriceLabel = "Order Price";
 
     if (isBuying) {
-        if (decision === "SCREAMING BUY" || decision === "STRONG BUY") {
-            suggestedPrice = targetLimit;
-            suggestedPriceLabel = "Unfiltered Bid";
-        } else if (decision.includes("WAIT")) {
-            suggestedPrice = Math.min(sma7, ema26);
-            if (suggestedPrice > currentPrice) suggestedPrice = currentPrice * 0.95;
-            suggestedPriceLabel = "Limit Buy";
-        } else if (decision === "BUY DIP") {
-            suggestedPrice = currentPrice * 0.98;
-            suggestedPriceLabel = "Catch Floor";
+        const aggression = getBuyAggression(decision, liquidityState, hasPositiveFlipEdge);
+        const underbidFloor = Math.max(1, Math.floor(safeInstantSell - Math.max(1, spread * 0.2)));
+        const fairCap = Math.min(
+            safeInstantBuy,
+            Math.max(safeInstantSell, Math.floor(fairValue * (hasPositiveFlipEdge ? 1.005 : 0.99)))
+        );
+        const spreadBid = safeInstantSell + spread * aggression;
+
+        suggestedPrice = clamp(
+            Math.floor(spreadBid),
+            decision === "WAIT" || decision === "WATCH" ? underbidFloor : safeInstantSell,
+            Math.max(safeInstantSell, fairCap)
+        );
+
+        if (decision === "SCREAMING BUY" || decision === "MOMENTUM BUY") {
+            suggestedPriceLabel = "Aggressive Bid";
+        } else if (decision === "WAIT" || decision === "WATCH") {
+            suggestedPriceLabel = "Passive Bid";
         } else {
-            suggestedPrice = targetLimit > 0 ? targetLimit : currentPrice;
-            suggestedPriceLabel = "Competitve Bid";
+            suggestedPriceLabel = "Competitive Bid";
         }
-
-        // --- VOLUME ADJUSTMENT (Buy) ---
-        if (liquidityState === "Illiquid" || liquidityState === "Low") {
-            // Low volume logic: Widen spread largely.
-            // Don't just pay bid (targetLimit), undermine it.
-            // If already at "Unfiltered Bid", maybe drop another 5%.
-            suggestedPrice = suggestedPrice * 0.92;
-            suggestedPriceLabel += " (Deep)";
-        } else if (liquidityState === "High") {
-            // High volume: Tighten spread, compete aggressively.
-            // If suggested is < current, maybe inch up to ensure fill.
-            // e.g. midpoint between sugg and current
-            const midpoint = (suggestedPrice + currentPrice) / 2;
-            if (midpoint < currentPrice) suggestedPrice = midpoint;
-        }
-
     } else {
-        // Selling
-        if (decision === "RIDE TREND") {
-            const trendStrength = (rsi14 - 50) / 100; // 0.05 to 0.3
-            const upside = Math.max(0.05, trendStrength + volatility);
-            suggestedPrice = currentPrice * (1 + upside);
-            suggestedPriceLabel = "Take Profit Target";
-        } else if (decision === "PANIC SELL" || decision === "CUT LOSSES") {
-            suggestedPrice = targetLimit; // The Bid (Low), immediate sell
-            suggestedPriceLabel = "Dump Price";
-        } else if (decision === "SELL NOW") {
-            suggestedPrice = currentPrice; // The Ask (High), competitive sell
-            suggestedPriceLabel = "List Price";
-        } else {
-            suggestedPrice = Math.max(currentPrice, sma7 * 1.02);
-            suggestedPriceLabel = "Ask Price";
-        }
+        const patience = getSellPatience(decision, liquidityState);
+        const spreadAsk = safeInstantSell + spread * patience;
+        const fairFloor = Math.max(safeInstantSell, Math.floor(fairValue * 0.995));
+        const reachAboveAsk = decision === "RIDE TREND" && liquidityState !== "Illiquid"
+            ? Math.max(1, Math.floor(spread * 0.15))
+            : 0;
 
-        // --- VOLUME ADJUSTMENT (Sell) ---
-        if (liquidityState === "Illiquid" || liquidityState === "Low") {
-            // Illiquid sell:
-            // If Panic/Cut Loss -> We need to be below targetLimit probably to actually exit.
-            if (decision.includes("SELL") || decision.includes("CUT")) {
-                suggestedPrice = suggestedPrice * 0.95; // Undercut the bid to escape
-                suggestedPriceLabel += " (Escape)";
-            } else {
-                // Determine if we hold. Illiquid = patience.
-                // Increase the ask higher because spread is wide.
-                suggestedPrice = suggestedPrice * 1.05;
-                suggestedPriceLabel += " (Patient)";
-            }
+        suggestedPrice = clamp(
+            Math.floor(spreadAsk),
+            decision === "PANIC SELL" || decision === "CUT LOSSES" ? safeInstantSell : fairFloor,
+            safeInstantBuy + reachAboveAsk
+        );
+
+        if (decision === "PANIC SELL" || decision === "CUT LOSSES") {
+            suggestedPriceLabel = "Fast Exit";
+        } else if (decision === "RIDE TREND") {
+            suggestedPriceLabel = "Profit Ask";
+        } else {
+            suggestedPriceLabel = "Competitive Ask";
         }
     }
 
-    // Safety check: ensure suggested price is positive and integer
     suggestedPrice = Math.floor(Math.max(1, suggestedPrice));
 
     return {
@@ -270,14 +321,20 @@ export function analyzeItemData(
             discountPct,
             taxBasis,
             netReturn,
+            flipMarginAfterTax,
             rsi: rsi14,
             emaShort: ema12,
             emaLong: ema26,
             volatility,
             vsAveragePct,
-            targetLimit,
-            volume: volume7d,
-            liquidity,
+            instantBuyPrice: safeInstantBuy,
+            instantSellPrice: safeInstantSell,
+            spread,
+            spreadPct,
+            geLimit,
+            dailyVolumeItems,
+            dailyVolumeNotional,
+            fillsPerLimit,
             liquidityState
         },
         suggestedPrice,

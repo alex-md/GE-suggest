@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useMemo } from 'react';
-import { Search, TrendingUp, TrendingDown, AlertTriangle, Activity, DollarSign, Percent, BarChart3, X } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, AlertTriangle, Activity, DollarSign, Percent, BarChart3, X, CheckCircle2, PauseCircle } from 'lucide-react';
 import { fetchItemMapping, fetchLatest, fetchTimeSeries } from './utils/api';
 import type { ItemMapping } from './utils/api';
 import { analyzeItemData } from './utils/strategy';
@@ -10,6 +10,15 @@ import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
+}
+
+type GuidanceTone = "positive" | "warning" | "danger";
+
+interface GuidanceCopy {
+  headline: string;
+  detail: string;
+  outcome: string;
+  tone: GuidanceTone;
 }
 
 export default function App() {
@@ -22,7 +31,6 @@ export default function App() {
 
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysis, setAnalysis] = useState<StrategyResult | null>(null);
-  const [currentPrice, setCurrentPrice] = useState<number>(0);
 
   // Load Mapping
   useEffect(() => {
@@ -56,35 +64,44 @@ export default function App() {
   const runAnalysis = async (item: ItemMapping, mode: "Buying" | "Selling") => {
     setLoadingAnalysis(true);
     try {
-      const latest = await fetchLatest(item.id);
-      const timeseries = await fetchTimeSeries(item.id, "24h");
+      const [latest, timeseries] = await Promise.all([
+        fetchLatest(item.id),
+        fetchTimeSeries(item.id, "24h")
+      ]);
 
-      if (!latest || !timeseries) {
+      if (!latest || latest.high <= 0 || latest.low <= 0 || timeseries.length === 0) {
         setAnalysis(null);
         return;
       }
 
-      // Latest Format: { high, highTime, low, lowTime }
-      // Buying: You pay Ask (High) usually.
-      // Selling: You get Bid (Low) usually.
       const isBuying = mode === "Buying";
-      const price = isBuying ? latest.high : latest.low;
-      const targetLimit = isBuying ? latest.low : latest.high; // Target limit (Passive) - Inverse of instant
-
-      // Convert timeseries to DailyPoint[]
-      // Wiki Timeseries "24h" endpoint returns { avgHighPrice, avgLowPrice, highPriceVolume, lowPriceVolume, timestamp }
-      // This matches our DailyPoint interface exactly.
-
-      const result = analyzeItemData(price, targetLimit, timeseries, isBuying);
-
-      setCurrentPrice(price);
+      const result = analyzeItemData(latest.high, latest.low, item.limit, timeseries, isBuying);
       setAnalysis(result);
     } catch (e) {
       console.error(e);
+      setAnalysis(null);
     } finally {
       setLoadingAnalysis(false);
     }
   };
+
+  const activeInstantPrice = analysis
+    ? mode === "Buying"
+      ? analysis.metrics.instantBuyPrice
+      : analysis.metrics.instantSellPrice
+    : 0;
+
+  const passivePrice = analysis
+    ? mode === "Buying"
+      ? analysis.metrics.instantSellPrice
+      : analysis.metrics.instantBuyPrice
+    : 0;
+
+  const suggestedDeltaPct = analysis && activeInstantPrice > 0
+    ? ((analysis.suggestedPrice - activeInstantPrice) / activeInstantPrice) * 100
+    : 0;
+
+  const guidance = analysis ? getGuidanceCopy(analysis, mode) : null;
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 font-sans selection:bg-emerald-500/30">
@@ -212,17 +229,58 @@ export default function App() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-neutral-500 uppercase tracking-widest font-semibold mb-1">Current Price</p>
+                      <p className="text-sm text-neutral-500 uppercase tracking-widest font-semibold mb-1">
+                        {mode === "Buying" ? "Instant Buy" : "Instant Sell"}
+                      </p>
                       <div className="text-3xl font-mono font-medium text-white">
-                        {currentPrice.toLocaleString()} <span className="text-yellow-500 text-lg">gp</span>
+                        {formatGp(activeInstantPrice)} <span className="text-yellow-500 text-lg">gp</span>
                       </div>
-                      <div className="text-xs text-neutral-500 mt-1">
-                        Target: {analysis.metrics.targetLimit.toLocaleString()} gp
+                      <div className="mt-2 space-y-1 text-xs text-neutral-500">
+                        <div>
+                          {mode === "Buying" ? "Passive Bid" : "Passive Ask"}: {formatGp(passivePrice)} gp
+                        </div>
+                        <div>
+                          Spread: {formatGp(analysis.metrics.spread)} gp ({analysis.metrics.spreadPct.toFixed(2)}%)
+                        </div>
+                        <div>
+                          GE Limit: {formatItems(analysis.metrics.geLimit)} / 4h
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="h-px bg-gradient-to-r from-transparent via-neutral-700 to-transparent" />
+
+                  {guidance && (
+                    <div className={cn(
+                      "rounded-xl border p-4",
+                      guidance.tone === "positive" && "border-emerald-500/30 bg-emerald-500/10",
+                      guidance.tone === "warning" && "border-yellow-500/30 bg-yellow-500/10",
+                      guidance.tone === "danger" && "border-red-500/30 bg-red-500/10"
+                    )}>
+                      <div className="flex items-start gap-3">
+                        <div className={cn(
+                          "mt-0.5 rounded-lg p-2",
+                          guidance.tone === "positive" && "bg-emerald-500/15 text-emerald-300",
+                          guidance.tone === "warning" && "bg-yellow-500/15 text-yellow-300",
+                          guidance.tone === "danger" && "bg-red-500/15 text-red-300"
+                        )}>
+                          {guidance.tone === "positive"
+                            ? <CheckCircle2 className="w-5 h-5" />
+                            : guidance.tone === "warning"
+                              ? <PauseCircle className="w-5 h-5" />
+                              : <AlertTriangle className="w-5 h-5" />
+                          }
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">What To Do</p>
+                          <p className="text-lg font-semibold text-white">{guidance.headline}</p>
+                          <p className="text-sm text-neutral-300">{guidance.detail}</p>
+                          <p className="text-sm text-neutral-400">{guidance.outcome}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Suggested Price Action Bar */}
                   <div className="flex items-center justify-between bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50">
@@ -237,16 +295,18 @@ export default function App() {
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-mono font-bold text-emerald-400">
-                        {analysis.suggestedPrice.toLocaleString()} <span className="text-sm text-emerald-600/70">gp</span>
+                        {formatGp(analysis.suggestedPrice)} <span className="text-sm text-emerald-600/70">gp</span>
                       </div>
                       <div className={cn(
                         "text-xs font-medium",
-                        analysis.suggestedPrice < currentPrice ? "text-emerald-500" : "text-neutral-500"
+                        analysis.suggestedPrice < activeInstantPrice
+                          ? "text-emerald-500"
+                          : "text-neutral-500"
                       )}>
-                        {analysis.suggestedPrice < currentPrice
-                          ? `${((currentPrice - analysis.suggestedPrice) / currentPrice * 100).toFixed(1)}% below current`
-                          : analysis.suggestedPrice > currentPrice
-                            ? `${((analysis.suggestedPrice - currentPrice) / currentPrice * 100).toFixed(1)}% above current`
+                        {analysis.suggestedPrice < activeInstantPrice
+                          ? `${Math.abs(suggestedDeltaPct).toFixed(1)}% below current`
+                          : analysis.suggestedPrice > activeInstantPrice
+                            ? `${suggestedDeltaPct.toFixed(1)}% above current`
                             : "At current market price"
                         }
                       </div>
@@ -257,7 +317,7 @@ export default function App() {
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <MetricCard
                       label={mode === "Buying" ? "Discount vs 30d" : "Tax Cost"}
-                      value={mode === "Buying" ? `${analysis.metrics.discountPct.toFixed(1)}%` : `${analysis.metrics.taxBasis.toLocaleString()}`}
+                      value={mode === "Buying" ? `${analysis.metrics.discountPct.toFixed(1)}%` : formatGp(analysis.metrics.taxBasis)}
                       subValue={mode === "Buying" ? "vs 30d High" : "gp"}
                       icon={mode === "Buying" ? Percent : DollarSign}
                       trend={mode === "Buying" ? (analysis.metrics.discountPct > 10 ? "up" : "down") : "neutral"}
@@ -278,22 +338,18 @@ export default function App() {
                       trend={analysis.metrics.volatility < 0.02 ? "up" : "down"}
                     />
                     <MetricCard
-                      label="Daily Liquidity"
-                      value={
-                        analysis.metrics.liquidity > 999_999_999
-                          ? (analysis.metrics.liquidity / 1_000_000_000).toFixed(1) + "B"
-                          : (analysis.metrics.liquidity / 1_000_000).toFixed(1) + "M"
-                      }
-                      subValue={analysis.metrics.liquidityState + " (GP)"}
+                      label="Daily Fills"
+                      value={formatItems(analysis.metrics.dailyVolumeItems)}
+                      subValue={`${analysis.metrics.liquidityState} • ${analysis.metrics.fillsPerLimit.toFixed(1)}x limit/day`}
                       icon={DollarSign}
                       trend={analysis.metrics.liquidityState === "Illiquid" || analysis.metrics.liquidityState === "Low" ? "down" : "up"}
                     />
                     <MetricCard
-                      label={mode === "Buying" ? "vs 7d Avg" : "Net Return"}
-                      value={mode === "Buying" ? `${analysis.metrics.vsAveragePct > 0 ? '+' : ''}${analysis.metrics.vsAveragePct.toFixed(1)}%` : `${analysis.metrics.netReturn.toLocaleString()}`}
-                      subValue={mode === "Buying" ? "SMA(7)" : "gp"}
+                      label={mode === "Buying" ? "Post-tax Spread" : "Net Return"}
+                      value={mode === "Buying" ? `${analysis.metrics.flipMarginAfterTax > 0 ? '+' : ''}${formatGp(analysis.metrics.flipMarginAfterTax)}` : formatGp(analysis.metrics.netReturn)}
+                      subValue={mode === "Buying" ? `${analysis.metrics.spreadPct.toFixed(2)}% live spread` : "gp after 2% tax"}
                       icon={BarChart3}
-                      trend={mode === "Buying" && analysis.metrics.vsAveragePct < 0 ? "up" : "neutral"}
+                      trend={mode === "Buying" ? (analysis.metrics.flipMarginAfterTax > 0 ? "up" : "down") : "neutral"}
                     />
                   </div>
                 </div>
@@ -311,6 +367,86 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function formatGp(value: number) {
+  return Math.round(value).toLocaleString();
+}
+
+function formatItems(value: number) {
+  return Math.round(value).toLocaleString();
+}
+
+function getGuidanceCopy(analysis: StrategyResult, mode: "Buying" | "Selling"): GuidanceCopy {
+  if (mode === "Buying") {
+    switch (analysis.decision) {
+      case "SCREAMING BUY":
+      case "STRONG BUY":
+      case "BUY":
+      case "BUY DIP":
+      case "MOMENTUM BUY":
+      case "ACCUMULATE":
+        return {
+          headline: `Buy this item near ${formatGp(analysis.suggestedPrice)} gp.`,
+          detail: analysis.suggestedPrice >= analysis.metrics.instantBuyPrice
+            ? "The setup is strong enough to pay close to the current market."
+            : "Use a limit bid instead of insta-buying so you keep the margin realistic.",
+          outcome: `If filled, your current modeled post-tax spread is ${analysis.metrics.flipMarginAfterTax >= 0 ? "+" : ""}${formatGp(analysis.metrics.flipMarginAfterTax)} gp.`,
+          tone: "positive"
+        };
+      case "WATCH":
+        return {
+          headline: `Do not chase this item. Place a patient buy offer around ${formatGp(analysis.suggestedPrice)} gp.`,
+          detail: "The setup is not strong enough to justify paying market right now.",
+          outcome: "Leave the order in and only buy if sellers come down to you.",
+          tone: "warning"
+        };
+      case "WAIT":
+      default:
+        return {
+          headline: "Wait before buying this item.",
+          detail: analysis.metrics.flipMarginAfterTax <= 0
+            ? "The live spread is too thin after GE tax, so the trade is not attractive yet."
+            : "The current entry is stretched. Let price come back to a better level first.",
+          outcome: `Best current patience price: about ${formatGp(analysis.suggestedPrice)} gp.`,
+          tone: "danger"
+        };
+    }
+  }
+
+  switch (analysis.decision) {
+    case "PANIC SELL":
+    case "CUT LOSSES":
+      return {
+        headline: `Sell now and take the fast exit near ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: "Price action is deteriorating, so preserving liquidity matters more than squeezing extra margin.",
+        outcome: `Expected net after tax at the current instant sell is ${formatGp(analysis.metrics.netReturn)} gp.`,
+        tone: "danger"
+      };
+    case "MANIC SELL":
+    case "SELL NOW":
+      return {
+        headline: `Sell this item now, but list slightly above market at ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: "Momentum is favorable enough to ask for a bit more instead of dumping instantly.",
+        outcome: "Take profit while buyers are still paying up.",
+        tone: "positive"
+      };
+    case "RIDE TREND":
+      return {
+        headline: `Hold for now and list higher around ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: "Trend is still moving up, so there is a case for asking above the current sell price.",
+        outcome: "This is a hold-then-sell-higher setup, not an immediate dump.",
+        tone: "positive"
+      };
+    case "LIST":
+    default:
+      return {
+        headline: `List this item passively around ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: "There is no urgent sell signal, but you can keep an offer in the market.",
+        outcome: "Wait for buyers to meet your ask instead of insta-selling.",
+        tone: "warning"
+      };
+  }
 }
 
 function MetricCard({ label, value, subValue, icon: Icon, trend }: { label: string, value: string, subValue: string, icon: React.ElementType, trend: "up" | "down" | "neutral" }) {

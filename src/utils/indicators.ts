@@ -7,6 +7,30 @@ export interface DailyPoint {
     lowPriceVolume: number;
 }
 
+export type VolumeMode = "high" | "low" | "combined";
+
+export function getRepresentativePrice(point: DailyPoint): number {
+    const high = point.avgHighPrice ?? 0;
+    const low = point.avgLowPrice ?? 0;
+
+    if (high > 0 && low > 0) return Math.floor((high + low) / 2);
+    if (high > 0) return high;
+    if (low > 0) return low;
+    return 0;
+}
+
+function getPointVolume(point: DailyPoint, mode: VolumeMode): number {
+    if (mode === "high") return point.highPriceVolume;
+    if (mode === "low") return point.lowPriceVolume;
+    return point.highPriceVolume + point.lowPriceVolume;
+}
+
+function getPointPrice(point: DailyPoint, mode: VolumeMode): number {
+    if (mode === "high") return point.avgHighPrice ?? getRepresentativePrice(point);
+    if (mode === "low") return point.avgLowPrice ?? getRepresentativePrice(point);
+    return getRepresentativePrice(point);
+}
+
 export function calculateRSI(data: DailyPoint[], periods: number): number {
     if (!data || data.length < periods + 1) return 50;
 
@@ -15,14 +39,7 @@ export function calculateRSI(data: DailyPoint[], periods: number): number {
     // If one is null, wiki API returns null. We need to handle that.
     // osrs.js checks .filter(p => p > 0), implying it handles 0 or nulls effectively if they result in 0 or NaN.
 
-    let prices = data.map(d => {
-        const h = d.avgHighPrice ?? 0;
-        const l = d.avgLowPrice ?? 0;
-        if (h === 0 && l === 0) return 0;
-        if (h === 0) return l;
-        if (l === 0) return h;
-        return Math.floor((h + l) / 2);
-    }).filter(p => p > 0);
+    let prices = data.map(getRepresentativePrice).filter(p => p > 0);
 
     // Slice to relevant window (periods + 20 for warm up, similar to osrs.js)
     if (prices.length > periods + 20) {
@@ -61,14 +78,7 @@ export function calculateRSI(data: DailyPoint[], periods: number): number {
 export function calculateEMA(data: DailyPoint[], periods: number): number {
     if (!data || data.length < periods) return 0;
 
-    const prices = data.map(d => {
-        const h = d.avgHighPrice ?? 0;
-        const l = d.avgLowPrice ?? 0;
-        if (h === 0 && l === 0) return 0;
-        if (h === 0) return l;
-        if (l === 0) return h;
-        return Math.floor((h + l) / 2);
-    }).filter(p => p > 0);
+    const prices = data.map(getRepresentativePrice).filter(p => p > 0);
 
     if (prices.length < periods) return 0;
 
@@ -95,15 +105,7 @@ export function calculateSMA(data: DailyPoint[], n: number): number {
     if (!data || data.length < n) return 0;
 
     const slice = data.slice(data.length - n);
-    const sum = slice.reduce((acc, b) => {
-        const h = b.avgHighPrice ?? 0;
-        const l = b.avgLowPrice ?? 0;
-        let price = 0;
-        if (h > 0 && l > 0) price = (h + l) / 2;
-        else if (h > 0) price = h;
-
-        return acc + price;
-    }, 0);
+    const sum = slice.reduce((acc, point) => acc + getRepresentativePrice(point), 0);
 
     return sum / n;
 }
@@ -111,13 +113,7 @@ export function calculateSMA(data: DailyPoint[], n: number): number {
 export function calculateVolatility(data: DailyPoint[], periods: number): number {
     if (!data || data.length < periods) return 0;
 
-    const relevant = data.slice(data.length - periods).map(d => {
-        const h = d.avgHighPrice ?? 0;
-        const l = d.avgLowPrice ?? 0;
-        if (h > 0 && l > 0) return (h + l) / 2;
-        if (h > 0) return h;
-        return 0;
-    }).filter(p => p > 0);
+    const relevant = data.slice(data.length - periods).map(getRepresentativePrice).filter(p => p > 0);
 
     if (relevant.length === 0) return 0;
 
@@ -127,14 +123,19 @@ export function calculateVolatility(data: DailyPoint[], periods: number): number
     return Math.sqrt(variance) / mean;
 }
 
-export function calculateAverageVolume(data: DailyPoint[], periods: number): number {
+export function calculateAverageVolume(data: DailyPoint[], periods: number, mode: VolumeMode = "combined"): number {
     if (!data || data.length === 0) return 0;
     const slice = data.slice(Math.max(0, data.length - periods));
-    const total = slice.reduce((acc, d) => acc + d.highPriceVolume + d.lowPriceVolume, 0);
+    const total = slice.reduce((acc, point) => acc + getPointVolume(point, mode), 0);
     return total / slice.length;
 }
 
-export function calculateLiquidity(data: DailyPoint[], currentPrice: number): number {
-    const avgVol = calculateAverageVolume(data, 7);
-    return avgVol * currentPrice;
+export function calculateAverageNotionalVolume(data: DailyPoint[], periods: number, mode: VolumeMode = "combined"): number {
+    if (!data || data.length === 0) return 0;
+    const slice = data.slice(Math.max(0, data.length - periods));
+    const total = slice.reduce((acc, point) => {
+        return acc + getPointVolume(point, mode) * getPointPrice(point, mode);
+    }, 0);
+
+    return total / slice.length;
 }
