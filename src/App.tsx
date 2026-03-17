@@ -444,14 +444,7 @@ export default function App() {
   );
 }
 
-function HeaderStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-1 p-2">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
+
 
 function CompactStat({ label, value, note }: { label: string; value: string; note: string }) {
   return (
