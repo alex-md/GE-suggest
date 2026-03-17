@@ -116,6 +116,7 @@ export default function App() {
 
   const guidance = analysis ? getGuidanceCopy(analysis, mode) : null;
   const priceDeltaTone = getPriceDeltaTone(suggestedDeltaPct);
+  const showSearchTray = query.length >= 2 && query !== selectedItem?.name;
 
   return (
     <div className="min-h-screen text-slate-100">
@@ -177,32 +178,49 @@ export default function App() {
               )}
             </div>
 
-            {searchResults.length > 0 && query !== selectedItem?.name && (
-              <div className="absolute left-5 right-5 top-[calc(100%-0.25rem)] z-50 mt-3 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur-2xl">
-                {searchResults.map(item => (
-                  <button
-                    key={item.id}
-                    className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.06]"
-                    onClick={() => handleSelect(item)}
-                  >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-                      <img
-                        src={`https://oldschool.runescape.wiki/images/${item.icon.replace(/ /g, '_')}`}
-                        alt=""
-                        className="h-6 w-6 object-contain"
-                        onError={event => {
-                          event.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                      <p className="text-xs text-slate-400">
-                        GE limit {formatItems(item.limit)} every 4 hours
-                      </p>
-                    </div>
-                  </button>
-                ))}
+            {showSearchTray && (
+              <div className="mt-4 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/90 shadow-[0_24px_80px_-48px_rgba(3,7,18,1)] backdrop-blur-2xl">
+                <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    {searchResults.length > 0 ? 'Matching items' : 'No matches yet'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {searchResults.length > 0 ? `${searchResults.length} shown` : 'Try a broader search'}
+                  </p>
+                </div>
+
+                {searchResults.length > 0 ? (
+                  <div className="max-h-[min(24rem,calc(100vh-18rem))] overflow-y-auto">
+                    {searchResults.map(item => (
+                      <button
+                        key={item.id}
+                        className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.06]"
+                        onClick={() => handleSelect(item)}
+                      >
+                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                          <img
+                            src={`https://oldschool.runescape.wiki/images/${item.icon.replace(/ /g, '_')}`}
+                            alt=""
+                            className="h-6 w-6 object-contain"
+                            onError={event => {
+                              event.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                          <p className="text-xs text-slate-400">
+                            GE limit {formatItems(item.limit)} every 4 hours
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="px-4 py-6 text-sm text-slate-400">
+                    No items matched that search. Try fewer letters or a broader name.
+                  </div>
+                )}
               </div>
             )}
           </div>
