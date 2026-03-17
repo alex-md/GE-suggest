@@ -26,6 +26,8 @@ export interface StrategyResult {
         emaLong: number;
         volatility: number;
         vsAveragePct: number;
+        rawInstantBuyPrice: number;
+        rawInstantSellPrice: number;
         instantBuyPrice: number;
         instantSellPrice: number;
         spread: number;
@@ -34,6 +36,8 @@ export interface StrategyResult {
         dailyVolumeItems: number;
         dailyVolumeNotional: number;
         fillsPerLimit: number;
+        liquidityScore: number;
+        executionAdjustment: number;
         liquidityState: "Illiquid" | "Low" | "Medium" | "High";
     };
     suggestedPrice: number;
@@ -52,11 +56,45 @@ function average(values: number[]): number {
     return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function getLiquidityState(fillsPerLimit: number, dailyVolumeItems: number): StrategyResult["metrics"]["liquidityState"] {
-    if (dailyVolumeItems < 1 || fillsPerLimit < 0.25) return "Illiquid";
-    if (fillsPerLimit < 1) return "Low";
-    if (fillsPerLimit < 4) return "Medium";
+function getLiquidityScore(fillsPerLimit: number, dailyVolumeItems: number): number {
+    const absoluteVolumeFloor = Math.log10(51);
+    const absoluteVolumeCeiling = Math.log10(5_001);
+    const absoluteVolumeScore = clamp(
+        (Math.log10(dailyVolumeItems + 1) - absoluteVolumeFloor) / (absoluteVolumeCeiling - absoluteVolumeFloor),
+        0,
+        1
+    );
+    const relativeFillScore = clamp(
+        Math.log10(fillsPerLimit + 1) / Math.log10(13),
+        0,
+        1
+    );
+
+    return clamp((absoluteVolumeScore * 0.72) + (relativeFillScore * 0.28), 0, 1);
+}
+
+function getLiquidityState(
+    fillsPerLimit: number,
+    dailyVolumeItems: number,
+    liquidityScore: number
+): StrategyResult["metrics"]["liquidityState"] {
+    if (dailyVolumeItems < 10 || fillsPerLimit < 0.25 || liquidityScore < 0.18) return "Illiquid";
+    if (dailyVolumeItems < 150 || fillsPerLimit < 1 || liquidityScore < 0.42) return "Low";
+    if (dailyVolumeItems < 2_500 || fillsPerLimit < 4 || liquidityScore < 0.72) return "Medium";
     return "High";
+}
+
+function getExecutionAdjustment(
+    referencePrice: number,
+    spread: number,
+    volatility: number,
+    liquidityScore: number
+): number {
+    const depthPenaltyPct = 0.0015 + ((1 - liquidityScore) * 0.025) + Math.min(0.01, volatility * 0.12);
+    const spreadPenalty = spread * (0.1 + ((1 - liquidityScore) * 0.75));
+    const pctPenalty = referencePrice * depthPenaltyPct;
+
+    return Math.max(1, Math.round(Math.max(spreadPenalty, pctPenalty)));
 }
 
 function getBuyAggression(decision: string, liquidityState: StrategyResult["metrics"]["liquidityState"], hasPositiveFlipEdge: boolean): number {
@@ -106,8 +144,27 @@ export function analyzeItemData(
     dailyPoints: DailyPoint[],
     isBuying: boolean
 ): StrategyResult {
-    const safeInstantBuy = Math.max(1, instantBuyPrice || 0);
-    const safeInstantSell = Math.max(1, instantSellPrice || 0);
+    const safeRawInstantBuy = Math.max(1, instantBuyPrice || 0);
+    const safeRawInstantSell = Math.max(1, instantSellPrice || 0);
+    const rawSpread = Math.max(0, safeRawInstantBuy - safeRawInstantSell);
+    const rsi14 = calculateRSI(dailyPoints, 14);
+    const ema12 = calculateEMA(dailyPoints, 12);
+    const ema26 = calculateEMA(dailyPoints, 26);
+    const volatility = calculateVolatility(dailyPoints, 7);
+    const sma7 = calculateSMA(dailyPoints, 7);
+    const dailyVolumeItems = calculateAverageVolume(dailyPoints, 7, isBuying ? "low" : "high");
+    const dailyVolumeNotional = calculateAverageNotionalVolume(dailyPoints, 7, isBuying ? "low" : "high");
+    const fillsPerLimit = geLimit > 0 ? dailyVolumeItems / geLimit : 0;
+    const liquidityScore = getLiquidityScore(fillsPerLimit, dailyVolumeItems);
+    const liquidityState = getLiquidityState(fillsPerLimit, dailyVolumeItems, liquidityScore);
+    const executionAdjustment = getExecutionAdjustment(
+        Math.max(1, Math.floor((safeRawInstantBuy + safeRawInstantSell) / 2)),
+        rawSpread,
+        volatility,
+        liquidityScore
+    );
+    const safeInstantBuy = safeRawInstantBuy + executionAdjustment;
+    const safeInstantSell = Math.max(1, safeRawInstantSell - executionAdjustment);
     const marketPrice = isBuying ? safeInstantBuy : safeInstantSell;
     const spread = Math.max(0, safeInstantBuy - safeInstantSell);
     const spreadPct = safeInstantSell > 0 ? (spread / safeInstantSell) * 100 : 0;
@@ -119,18 +176,7 @@ export function analyzeItemData(
     const taxBasis = calculateTax(marketPrice);
     const netReturn = marketPrice - taxBasis;
     const flipMarginAfterTax = safeInstantBuy - safeInstantSell - calculateTax(safeInstantBuy);
-
-    const rsi14 = calculateRSI(dailyPoints, 14);
-    const ema12 = calculateEMA(dailyPoints, 12);
-    const ema26 = calculateEMA(dailyPoints, 26);
-    const volatility = calculateVolatility(dailyPoints, 7);
-    const sma7 = calculateSMA(dailyPoints, 7);
     const vsAveragePct = sma7 > 0 ? ((marketPrice - sma7) / sma7) * 100 : 0;
-
-    const dailyVolumeItems = calculateAverageVolume(dailyPoints, 7, isBuying ? "low" : "high");
-    const dailyVolumeNotional = calculateAverageNotionalVolume(dailyPoints, 7, isBuying ? "low" : "high");
-    const fillsPerLimit = geLimit > 0 ? dailyVolumeItems / geLimit : 0;
-    const liquidityState = getLiquidityState(fillsPerLimit, dailyVolumeItems);
 
     let decision = "WAIT";
     let subtext = "Checking...";
@@ -151,6 +197,12 @@ export function analyzeItemData(
         reasons.push(`Passive fills average only ${Math.round(dailyVolumeItems).toLocaleString()} items/day (${fillsPerLimit.toFixed(2)}x limit/day)`);
     } else if (liquidityState === "Low") {
         reasons.push(`Fill rate is modest at ${Math.round(dailyVolumeItems).toLocaleString()} items/day (${fillsPerLimit.toFixed(2)}x limit/day)`);
+    } else if (liquidityState === "Medium" && dailyVolumeItems < 2_500) {
+        reasons.push(`Relative fills are fine, but depth is still only ${Math.round(dailyVolumeItems).toLocaleString()} items/day`);
+    }
+
+    if (liquidityScore < 0.72) {
+        reasons.push(`Modeled instant execution widens by about ${executionAdjustment.toLocaleString()} gp to account for thin depth`);
     }
 
     if (isBuying && !hasPositiveFlipEdge) {
@@ -260,7 +312,7 @@ export function analyzeItemData(
     const fairValueInputs = [sma7, ema12, ema26].filter(value => value > 0);
     const fairValue = fairValueInputs.length > 0
         ? average(fairValueInputs)
-        : average([safeInstantBuy, safeInstantSell].filter(value => value > 0));
+        : average([safeRawInstantBuy, safeRawInstantSell].filter(value => value > 0));
 
     let suggestedPrice = marketPrice;
     let suggestedPriceLabel = "Order Price";
@@ -327,6 +379,8 @@ export function analyzeItemData(
             emaLong: ema26,
             volatility,
             vsAveragePct,
+            rawInstantBuyPrice: safeRawInstantBuy,
+            rawInstantSellPrice: safeRawInstantSell,
             instantBuyPrice: safeInstantBuy,
             instantSellPrice: safeInstantSell,
             spread,
@@ -335,6 +389,8 @@ export function analyzeItemData(
             dailyVolumeItems,
             dailyVolumeNotional,
             fillsPerLimit,
+            liquidityScore,
+            executionAdjustment,
             liquidityState
         },
         suggestedPrice,

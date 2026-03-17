@@ -1,18 +1,30 @@
-
-import { useEffect, useState, useMemo } from 'react';
-import { Search, TrendingUp, TrendingDown, AlertTriangle, Activity, DollarSign, Percent, BarChart3, X, CheckCircle2, PauseCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  DollarSign,
+  Percent,
+  PauseCircle,
+  Search,
+  TrendingDown,
+  TrendingUp,
+  X
+} from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import { fetchItemMapping, fetchLatest, fetchTimeSeries } from './utils/api';
 import type { ItemMapping } from './utils/api';
 import { analyzeItemData } from './utils/strategy';
 import type { StrategyResult } from './utils/strategy';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs));
 }
 
-type GuidanceTone = "positive" | "warning" | "danger";
+type GuidanceTone = 'positive' | 'warning' | 'danger';
+type TradeMode = 'Buying' | 'Selling';
 
 interface GuidanceCopy {
   headline: string;
@@ -25,14 +37,13 @@ export default function App() {
   const [items, setItems] = useState<ItemMapping[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [selectedItem, setSelectedItem] = useState<ItemMapping | null>(null);
-  const [mode, setMode] = useState<"Buying" | "Selling">("Buying");
+  const [mode, setMode] = useState<TradeMode>('Buying');
 
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysis, setAnalysis] = useState<StrategyResult | null>(null);
 
-  // Load Mapping
   useEffect(() => {
     fetchItemMapping().then(data => {
       setItems(data);
@@ -40,11 +51,10 @@ export default function App() {
     });
   }, []);
 
-  // Filter Search
   const searchResults = useMemo(() => {
     if (!query || query.length < 2) return [];
     const lower = query.toLowerCase();
-    return items.filter(i => i.name.toLowerCase().includes(lower)).slice(0, 10);
+    return items.filter(item => item.name.toLowerCase().includes(lower)).slice(0, 10);
   }, [query, items]);
 
   const handleSelect = (item: ItemMapping) => {
@@ -54,19 +64,17 @@ export default function App() {
     runAnalysis(item, mode);
   };
 
-  const handleModeToggle = (newMode: "Buying" | "Selling") => {
+  const handleModeToggle = (newMode: TradeMode) => {
     setMode(newMode);
-    if (selectedItem) {
-      runAnalysis(selectedItem, newMode);
-    }
+    if (selectedItem) runAnalysis(selectedItem, newMode);
   };
 
-  const runAnalysis = async (item: ItemMapping, mode: "Buying" | "Selling") => {
+  const runAnalysis = async (item: ItemMapping, nextMode: TradeMode) => {
     setLoadingAnalysis(true);
     try {
       const [latest, timeseries] = await Promise.all([
         fetchLatest(item.id),
-        fetchTimeSeries(item.id, "24h")
+        fetchTimeSeries(item.id, '24h')
       ]);
 
       if (!latest || latest.high <= 0 || latest.low <= 0 || timeseries.length === 0) {
@@ -74,11 +82,10 @@ export default function App() {
         return;
       }
 
-      const isBuying = mode === "Buying";
-      const result = analyzeItemData(latest.high, latest.low, item.limit, timeseries, isBuying);
+      const result = analyzeItemData(latest.high, latest.low, item.limit, timeseries, nextMode === 'Buying');
       setAnalysis(result);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
       setAnalysis(null);
     } finally {
       setLoadingAnalysis(false);
@@ -86,15 +93,21 @@ export default function App() {
   };
 
   const activeInstantPrice = analysis
-    ? mode === "Buying"
+    ? mode === 'Buying'
       ? analysis.metrics.instantBuyPrice
       : analysis.metrics.instantSellPrice
     : 0;
 
   const passivePrice = analysis
-    ? mode === "Buying"
+    ? mode === 'Buying'
       ? analysis.metrics.instantSellPrice
       : analysis.metrics.instantBuyPrice
+    : 0;
+
+  const rawActiveInstantPrice = analysis
+    ? mode === 'Buying'
+      ? analysis.metrics.rawInstantBuyPrice
+      : analysis.metrics.rawInstantSellPrice
     : 0;
 
   const suggestedDeltaPct = analysis && activeInstantPrice > 0
@@ -102,268 +115,582 @@ export default function App() {
     : 0;
 
   const guidance = analysis ? getGuidanceCopy(analysis, mode) : null;
+  const priceDeltaTone = getPriceDeltaTone(suggestedDeltaPct);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 p-6 font-sans selection:bg-emerald-500/30">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-6">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-              OSRS Flipper
-            </h1>
-            <p className="text-neutral-400 mt-1">Advanced Market Intelligence & Strategy Engine</p>
+    <div className="min-h-screen text-slate-100">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+        <header className="grid gap-4 rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.9)] backdrop-blur-xl lg:grid-cols-[1.35fr_0.65fr] lg:p-6">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200">
+              Grand Exchange Strategy Desk
+            </div>
+            <div className="space-y-2">
+              <h1 className="max-w-2xl text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl">
+                OSRS Flipper
+              </h1>
+              <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+                Cleaner signals, liquidity-aware execution, and a decision-first dashboard for fast reads.
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-neutral-500">
-            <div className={cn("w-2 h-2 rounded-full", loadingItems ? "bg-yellow-500 animate-pulse" : "bg-emerald-500")} />
-            {loadingItems ? "Syncing GE Database..." : "GE Database Ready"}
+
+          <div className="grid gap-3 rounded-[24px] border border-white/10 bg-slate-950/40 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Data Status</p>
+              <div className="inline-flex items-center gap-2 text-sm text-slate-300">
+                <span className={cn('h-2.5 w-2.5 rounded-full', loadingItems ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400')} />
+                {loadingItems ? 'Syncing' : 'Ready'}
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
+              <HeaderStat label="Live quotes" value="Instant + passive" />
+              <HeaderStat label="Decision model" value="Trend + tax + depth" />
+              <HeaderStat label="Depth check" value="Abs fills weighted" />
+            </div>
           </div>
         </header>
 
-        {/* Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-3 relative z-50">
+        <section className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="relative rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_-38px_rgba(8,15,33,0.95)] backdrop-blur-xl">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Find an item</p>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-500" />
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
-                placeholder="Search item (e.g., Abyssal Whip)..."
-                className="w-full bg-neutral-900 border border-neutral-800 rounded-xl py-3 pl-10 pr-10 focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all placeholder:text-neutral-600"
+                placeholder="Search an item name..."
+                className="h-14 w-full rounded-2xl border border-white/10 bg-white/5 pl-12 pr-12 text-base text-white outline-none transition-all placeholder:text-slate-500 focus:border-cyan-400/40 focus:bg-white/[0.07] focus:ring-4 focus:ring-cyan-400/10"
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={event => setQuery(event.target.value)}
               />
               {query && (
                 <button
                   onClick={() => {
-                    setQuery("");
+                    setQuery('');
                     setSelectedItem(null);
                     setAnalysis(null);
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            {/* Dropdown */}
+
             {searchResults.length > 0 && query !== selectedItem?.name && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+              <div className="absolute left-5 right-5 top-[calc(100%-0.25rem)] z-50 mt-3 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl backdrop-blur-2xl">
                 {searchResults.map(item => (
                   <button
                     key={item.id}
-                    className="w-full text-left px-4 py-3 hover:bg-neutral-800 flex items-center gap-3 transition-colors"
+                    className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.06]"
                     onClick={() => handleSelect(item)}
                   >
-                    <img src={`https://oldschool.runescape.wiki/images/${item.icon.replace(/ /g, '_')}`} alt="" className="w-6 h-6 object-contain" onError={(e) => e.currentTarget.style.display = 'none'} />
-                    <span>{item.name}</span>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                      <img
+                        src={`https://oldschool.runescape.wiki/images/${item.icon.replace(/ /g, '_')}`}
+                        alt=""
+                        className="h-6 w-6 object-contain"
+                        onError={event => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                      <p className="text-xs text-slate-400">
+                        GE limit {formatItems(item.limit)} every 4 hours
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          <div className="bg-neutral-900 p-1 rounded-xl flex border border-neutral-800 relative">
-            <button
-              onClick={() => handleModeToggle("Buying")}
-              className={cn(
-                "flex-1 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 relative z-10",
-                mode === "Buying" ? "text-white shadow-sm" : "text-neutral-500 hover:text-neutral-300"
-              )}
-            >
-              Buying
-            </button>
-            <button
-              onClick={() => handleModeToggle("Selling")}
-              className={cn(
-                "flex-1 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 relative z-10",
-                mode === "Selling" ? "text-white shadow-sm" : "text-neutral-500 hover:text-neutral-300"
-              )}
-            >
-              Selling
-            </button>
-            {/* Scanning background pill */}
-            <div className={cn(
-              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg bg-neutral-700/50 transition-all duration-300",
-              mode === "Selling" ? "left-[calc(50%+2px)]" : "left-1"
-            )} />
-          </div>
-        </div>
-
-        {/* Content Area */}
-        {selectedItem && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-            {/* Main Analysis Card */}
-            <div className={cn(
-              "rounded-2xl p-6 border-2 shadow-[0_0_40px_-10px_rgba(0,0,0,0.5)] transition-all",
-              loadingAnalysis ? "opacity-50 blur-[2px]" : "opacity-100 blur-0",
-              !analysis ? "border-neutral-800 bg-neutral-900/50" :
-                analysis.color === "green" ? "border-emerald-500/30 bg-emerald-950/10 shadow-emerald-900/20" :
-                  analysis.color === "red" ? "border-red-500/30 bg-red-950/10 shadow-red-900/20" :
-                    "border-yellow-500/30 bg-yellow-950/10 shadow-yellow-900/20"
-            )}>
-              {loadingAnalysis ? (
-                <div className="h-40 flex items-center justify-center text-neutral-400 gap-3">
-                  <Activity className="animate-spin w-6 h-6" />
-                  <span>Analyzing Market Data...</span>
-                </div>
-              ) : analysis ? (
-                <div className="space-y-6">
-                  <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h2 className="text-4xl font-black tracking-tight flex items-center gap-3">
-                          {analysis.decision}
-                        </h2>
-                        <span className={cn(
-                          "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border",
-                          analysis.color === "green" ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300" :
-                            analysis.color === "red" ? "bg-red-500/20 border-red-500/50 text-red-300" :
-                              "bg-yellow-500/20 border-yellow-500/50 text-yellow-300"
-                        )}>
-                          {analysis.subtext}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-lg text-neutral-300 max-w-2xl leading-relaxed">
-                        {analysis.explanation}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-neutral-500 uppercase tracking-widest font-semibold mb-1">
-                        {mode === "Buying" ? "Instant Buy" : "Instant Sell"}
-                      </p>
-                      <div className="text-3xl font-mono font-medium text-white">
-                        {formatGp(activeInstantPrice)} <span className="text-yellow-500 text-lg">gp</span>
-                      </div>
-                      <div className="mt-2 space-y-1 text-xs text-neutral-500">
-                        <div>
-                          {mode === "Buying" ? "Passive Bid" : "Passive Ask"}: {formatGp(passivePrice)} gp
-                        </div>
-                        <div>
-                          Spread: {formatGp(analysis.metrics.spread)} gp ({analysis.metrics.spreadPct.toFixed(2)}%)
-                        </div>
-                        <div>
-                          GE Limit: {formatItems(analysis.metrics.geLimit)} / 4h
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-gradient-to-r from-transparent via-neutral-700 to-transparent" />
-
-                  {guidance && (
-                    <div className={cn(
-                      "rounded-xl border p-4",
-                      guidance.tone === "positive" && "border-emerald-500/30 bg-emerald-500/10",
-                      guidance.tone === "warning" && "border-yellow-500/30 bg-yellow-500/10",
-                      guidance.tone === "danger" && "border-red-500/30 bg-red-500/10"
-                    )}>
-                      <div className="flex items-start gap-3">
-                        <div className={cn(
-                          "mt-0.5 rounded-lg p-2",
-                          guidance.tone === "positive" && "bg-emerald-500/15 text-emerald-300",
-                          guidance.tone === "warning" && "bg-yellow-500/15 text-yellow-300",
-                          guidance.tone === "danger" && "bg-red-500/15 text-red-300"
-                        )}>
-                          {guidance.tone === "positive"
-                            ? <CheckCircle2 className="w-5 h-5" />
-                            : guidance.tone === "warning"
-                              ? <PauseCircle className="w-5 h-5" />
-                              : <AlertTriangle className="w-5 h-5" />
-                          }
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">What To Do</p>
-                          <p className="text-lg font-semibold text-white">{guidance.headline}</p>
-                          <p className="text-sm text-neutral-300">{guidance.detail}</p>
-                          <p className="text-sm text-neutral-400">{guidance.outcome}</p>
-                        </div>
-                      </div>
-                    </div>
+          <div className="rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_-38px_rgba(8,15,33,0.95)] backdrop-blur-xl">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Trading mode</p>
+            <div className="grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1">
+              {(['Buying', 'Selling'] as TradeMode[]).map(option => (
+                <button
+                  key={option}
+                  onClick={() => handleModeToggle(option)}
+                  className={cn(
+                    'rounded-[14px] px-4 py-3 text-sm font-semibold transition-all',
+                    mode === option
+                      ? 'bg-white text-slate-950 shadow-lg shadow-white/10'
+                      : 'text-slate-400 hover:text-white'
                   )}
-
-                  {/* Suggested Price Action Bar */}
-                  <div className="flex items-center justify-between bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/50">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-emerald-500/10 p-2 rounded-lg">
-                        <DollarSign className="w-5 h-5 text-emerald-400" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-neutral-400 uppercase tracking-wider font-bold">{analysis.suggestedPriceLabel}</p>
-                        <p className="text-sm text-neutral-300">Recommended Order Price</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-mono font-bold text-emerald-400">
-                        {formatGp(analysis.suggestedPrice)} <span className="text-sm text-emerald-600/70">gp</span>
-                      </div>
-                      <div className={cn(
-                        "text-xs font-medium",
-                        analysis.suggestedPrice < activeInstantPrice
-                          ? "text-emerald-500"
-                          : "text-neutral-500"
-                      )}>
-                        {analysis.suggestedPrice < activeInstantPrice
-                          ? `${Math.abs(suggestedDeltaPct).toFixed(1)}% below current`
-                          : analysis.suggestedPrice > activeInstantPrice
-                            ? `${suggestedDeltaPct.toFixed(1)}% above current`
-                            : "At current market price"
-                        }
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <MetricCard
-                      label={mode === "Buying" ? "Discount vs 30d" : "Tax Cost"}
-                      value={mode === "Buying" ? `${analysis.metrics.discountPct.toFixed(1)}%` : formatGp(analysis.metrics.taxBasis)}
-                      subValue={mode === "Buying" ? "vs 30d High" : "gp"}
-                      icon={mode === "Buying" ? Percent : DollarSign}
-                      trend={mode === "Buying" ? (analysis.metrics.discountPct > 10 ? "up" : "down") : "neutral"}
-                    />
-                    <MetricCard
-                      label="RSI (14)"
-                      value={analysis.metrics.rsi.toFixed(0)}
-                      subValue={analysis.metrics.rsi > 70 ? "Overbought" : analysis.metrics.rsi < 30 ? "Oversold" : "Neutral"}
-                      icon={Activity}
-                      trend={analysis.metrics.rsi < 30 ? "up" : analysis.metrics.rsi > 70 ? "down" : "neutral"}
-                    // "Good" trend depends on context, but generally deep value (low rsi) is "up" opportunity
-                    />
-                    <MetricCard
-                      label="Volatility"
-                      value={(analysis.metrics.volatility * 100).toFixed(1) + "%"}
-                      subValue={analysis.metrics.volatility > 0.08 ? "High Risk" : "Stable"}
-                      icon={AlertTriangle}
-                      trend={analysis.metrics.volatility < 0.02 ? "up" : "down"}
-                    />
-                    <MetricCard
-                      label="Daily Fills"
-                      value={formatItems(analysis.metrics.dailyVolumeItems)}
-                      subValue={`${analysis.metrics.liquidityState} • ${analysis.metrics.fillsPerLimit.toFixed(1)}x limit/day`}
-                      icon={DollarSign}
-                      trend={analysis.metrics.liquidityState === "Illiquid" || analysis.metrics.liquidityState === "Low" ? "down" : "up"}
-                    />
-                    <MetricCard
-                      label={mode === "Buying" ? "Post-tax Spread" : "Net Return"}
-                      value={mode === "Buying" ? `${analysis.metrics.flipMarginAfterTax > 0 ? '+' : ''}${formatGp(analysis.metrics.flipMarginAfterTax)}` : formatGp(analysis.metrics.netReturn)}
-                      subValue={mode === "Buying" ? `${analysis.metrics.spreadPct.toFixed(2)}% live spread` : "gp after 2% tax"}
-                      icon={BarChart3}
-                      trend={mode === "Buying" ? (analysis.metrics.flipMarginAfterTax > 0 ? "up" : "down") : "neutral"}
-                    />
-                  </div>
-                </div>
-              ) : null}
+                >
+                  {option}
+                </button>
+              ))}
             </div>
+            <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-400/10 via-transparent to-emerald-400/10 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Current lens</p>
+              <p className="text-lg font-semibold text-white">
+                {mode === 'Buying' ? 'Prioritize entry price and tax-clearing margin.' : 'Prioritize exit quality and liquidity.'}
+              </p>
+              <p className="text-sm leading-6 text-slate-300">
+                {mode === 'Buying'
+                  ? 'The model leans on trend, spread, and market depth to decide whether to bid patiently or pay up.'
+                  : 'The model weighs trend persistence against depth so thin items do not look easier to unload than they really are.'}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {selectedItem && (
+          <div className="grid gap-4">
+            <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <div className={cn(
+                'rounded-[32px] border p-6 shadow-[0_28px_90px_-48px_rgba(3,7,18,1)] backdrop-blur-xl transition-all',
+                loadingAnalysis ? 'border-white/10 bg-white/[0.04] opacity-60' : getDecisionSurface(analysis?.color)
+              )}>
+                {loadingAnalysis ? (
+                  <div className="flex h-full min-h-[320px] items-center justify-center gap-3 text-slate-300">
+                    <Activity className="h-6 w-6 animate-spin" />
+                    <span>Refreshing market read...</span>
+                  </div>
+                ) : analysis ? (
+                  <div className="space-y-6">
+                    <div className="flex flex-col gap-5 border-b border-white/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/5 shadow-inner">
+                            <img
+                              src={`https://oldschool.runescape.wiki/images/${selectedItem.icon.replace(/ /g, '_')}`}
+                              alt=""
+                              className="h-10 w-10 object-contain"
+                              onError={event => {
+                                event.currentTarget.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                              {mode === 'Buying' ? 'Buy-side setup' : 'Sell-side setup'}
+                            </p>
+                            <h2 className="text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">
+                              {selectedItem.name}
+                            </h2>
+                            <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                              <Tag>{analysis.metrics.liquidityState} depth</Tag>
+                              <Tag>{formatItems(selectedItem.limit)} / 4h limit</Tag>
+                              <Tag>{formatItems(analysis.metrics.dailyVolumeItems)} fills/day</Tag>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.16em] text-white">
+                              {analysis.decision}
+                            </span>
+                            <span className={cn(
+                              'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+                              getSubtextTone(analysis.color)
+                            )}>
+                              {analysis.subtext}
+                            </span>
+                          </div>
+                          <p className="max-w-3xl text-base leading-7 text-slate-200 sm:text-lg">
+                            {analysis.explanation}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid min-w-[220px] gap-3 rounded-[24px] border border-white/10 bg-slate-950/45 p-4">
+                        <CompactStat
+                          label="Depth score"
+                          value={`${Math.round(analysis.metrics.liquidityScore * 100)}/100`}
+                          note={getLiquiditySummary(analysis.metrics.liquidityState)}
+                        />
+                        <CompactStat
+                          label="Momentum"
+                          value={getRsiLabel(analysis.metrics.rsi)}
+                          note={`RSI ${analysis.metrics.rsi.toFixed(0)}`}
+                        />
+                        <CompactStat
+                          label="Risk"
+                          value={getVolatilityLabel(analysis.metrics.volatility)}
+                          note={`${(analysis.metrics.volatility * 100).toFixed(1)}% 7d vol`}
+                        />
+                      </div>
+                    </div>
+
+                    {guidance && (
+                      <GuidancePanel guidance={guidance} />
+                    )}
+                  </div>
+                ) : (
+                  <EmptyAnalysisState />
+                )}
+              </div>
+
+              <div className="rounded-[32px] border border-white/10 bg-slate-950/60 p-6 shadow-[0_28px_90px_-48px_rgba(3,7,18,1)] backdrop-blur-xl">
+                {analysis ? (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Execution plan</p>
+                      <h3 className="text-2xl font-black tracking-[-0.04em] text-white">
+                        {analysis.suggestedPriceLabel}
+                      </h3>
+                    </div>
+
+                    <div className="rounded-[28px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/14 via-emerald-400/6 to-cyan-400/12 p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100/70">
+                        Recommended order
+                      </p>
+                      <div className="mt-2 flex items-end justify-between gap-4">
+                        <div>
+                          <div className="text-4xl font-black tracking-[-0.05em] text-white">
+                            {formatGp(analysis.suggestedPrice)}
+                            <span className="ml-2 text-lg font-semibold text-emerald-200/70">gp</span>
+                          </div>
+                          <p className="mt-2 max-w-xs text-sm leading-6 text-emerald-50/80">
+                            {mode === 'Buying'
+                              ? 'Use this as the realistic entry level instead of assuming the last print is instantly available.'
+                              : 'Use this as the working exit level instead of assuming immediate fills at the last print.'}
+                          </p>
+                        </div>
+                        <div className={cn(
+                          'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+                          priceDeltaTone
+                        )}>
+                          {formatDeltaText(suggestedDeltaPct)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3">
+                      <PriceLine
+                        label={mode === 'Buying' ? 'Estimated instant buy' : 'Estimated instant sell'}
+                        value={activeInstantPrice}
+                        emphasis
+                      />
+                      <PriceLine
+                        label="Last print"
+                        value={rawActiveInstantPrice}
+                      />
+                      <PriceLine
+                        label={mode === 'Buying' ? 'Modeled passive bid' : 'Modeled passive ask'}
+                        value={passivePrice}
+                      />
+                      <PriceLine
+                        label="Liquidity cushion"
+                        value={analysis.metrics.executionAdjustment}
+                        prefix="±"
+                      />
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Execution notes</p>
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <ExecutionMetric
+                          label="Spread"
+                          value={`${formatGp(analysis.metrics.spread)} gp`}
+                          note={`${analysis.metrics.spreadPct.toFixed(2)}% modeled`}
+                        />
+                        <ExecutionMetric
+                          label={mode === 'Buying' ? 'Edge after tax' : 'Net after tax'}
+                          value={mode === 'Buying'
+                            ? `${analysis.metrics.flipMarginAfterTax >= 0 ? '+' : ''}${formatGp(analysis.metrics.flipMarginAfterTax)} gp`
+                            : `${formatGp(analysis.metrics.netReturn)} gp`}
+                          note={mode === 'Buying' ? 'Modeled flip margin' : 'Instant exit net'}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyAnalysisState />
+                )}
+              </div>
+            </section>
+
+            {analysis && (
+              <>
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard
+                    label={mode === 'Buying' ? 'Value check' : 'Exit cost'}
+                    value={mode === 'Buying' ? `${analysis.metrics.discountPct.toFixed(1)}%` : `${formatGp(analysis.metrics.taxBasis)} gp`}
+                    subValue={mode === 'Buying' ? 'Below 30d high' : 'GE tax'}
+                    icon={mode === 'Buying' ? Percent : DollarSign}
+                    trend={mode === 'Buying' ? (analysis.metrics.discountPct > 10 ? 'up' : 'neutral') : 'neutral'}
+                  />
+                  <MetricCard
+                    label="Momentum"
+                    value={analysis.metrics.rsi.toFixed(0)}
+                    subValue={getRsiLabel(analysis.metrics.rsi)}
+                    icon={Activity}
+                    trend={analysis.metrics.rsi < 30 ? 'up' : analysis.metrics.rsi > 70 ? 'down' : 'neutral'}
+                  />
+                  <MetricCard
+                    label="Market depth"
+                    value={formatItems(analysis.metrics.dailyVolumeItems)}
+                    subValue={`${analysis.metrics.liquidityState} • ${analysis.metrics.fillsPerLimit.toFixed(1)}x limit/day`}
+                    icon={BarChart3}
+                    trend={analysis.metrics.liquidityState === 'High' ? 'up' : analysis.metrics.liquidityState === 'Illiquid' ? 'down' : 'neutral'}
+                  />
+                  <MetricCard
+                    label="Volatility"
+                    value={`${(analysis.metrics.volatility * 100).toFixed(1)}%`}
+                    subValue={getVolatilityLabel(analysis.metrics.volatility)}
+                    icon={AlertTriangle}
+                    trend={analysis.metrics.volatility < 0.02 ? 'up' : analysis.metrics.volatility > 0.08 ? 'down' : 'neutral'}
+                  />
+                </section>
+
+                <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                  <div className="rounded-[28px] border border-white/10 bg-slate-950/55 p-6 shadow-[0_24px_80px_-46px_rgba(3,7,18,1)] backdrop-blur-xl">
+                    <SectionHeader
+                      eyebrow="Market context"
+                      title="Readable snapshot"
+                      description="The support data is grouped by trading questions rather than raw feed fields."
+                    />
+                    <div className="mt-5 grid gap-4">
+                      <InsightRow
+                        title="How liquid is this item?"
+                        value={`${analysis.metrics.liquidityState} depth`}
+                        detail={`${formatItems(analysis.metrics.dailyVolumeItems)} items/day, ${analysis.metrics.fillsPerLimit.toFixed(1)}x GE limit/day`}
+                      />
+                      <InsightRow
+                        title="How far can the model trust instant pricing?"
+                        value={`${formatGp(analysis.metrics.executionAdjustment)} gp cushion`}
+                        detail={`Raw print ${formatGp(rawActiveInstantPrice)} gp, modeled instant ${formatGp(activeInstantPrice)} gp`}
+                      />
+                      <InsightRow
+                        title={mode === 'Buying' ? 'Does the spread clear tax?' : 'What is the net on exit?'}
+                        value={mode === 'Buying'
+                          ? `${analysis.metrics.flipMarginAfterTax >= 0 ? '+' : ''}${formatGp(analysis.metrics.flipMarginAfterTax)} gp`
+                          : `${formatGp(analysis.metrics.netReturn)} gp`}
+                        detail={mode === 'Buying'
+                          ? `${analysis.metrics.spreadPct.toFixed(2)}% modeled spread after slippage`
+                          : `Tax basis ${formatGp(analysis.metrics.taxBasis)} gp`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-white/10 bg-slate-950/55 p-6 shadow-[0_24px_80px_-46px_rgba(3,7,18,1)] backdrop-blur-xl">
+                    <SectionHeader
+                      eyebrow="Decision framing"
+                      title="Why the model landed here"
+                      description="A concise readout of the most important drivers behind the current recommendation."
+                    />
+                    <div className="mt-5 grid gap-3">
+                      <ReasonPill>
+                        {mode === 'Buying'
+                          ? `The model compares the entry against a liquidity-adjusted instant price, not just the raw last buy print.`
+                          : `The model discounts thin sell-side markets so weak depth is reflected in the exit estimate.`}
+                      </ReasonPill>
+                      <ReasonPill>
+                        {analysis.metrics.liquidityState === 'High'
+                          ? 'Depth is strong enough that relative fill speed and absolute fills both support fast execution.'
+                          : `Depth is capped at ${analysis.metrics.liquidityState.toLowerCase()} because absolute daily fills are not deep enough to trust raw prints.`}
+                      </ReasonPill>
+                      <ReasonPill>
+                        {mode === 'Buying'
+                          ? `Current momentum reads ${getRsiLabel(analysis.metrics.rsi).toLowerCase()} with ${getVolatilityLabel(analysis.metrics.volatility).toLowerCase()} volatility.`
+                          : `Exit context shows ${getRsiLabel(analysis.metrics.rsi).toLowerCase()} conditions with ${getVolatilityLabel(analysis.metrics.volatility).toLowerCase()} short-term volatility.`}
+                      </ReasonPill>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
           </div>
         )}
 
         {!selectedItem && !loadingItems && (
-          <div className="text-center py-20 text-neutral-600">
-            <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-lg">Search for an item to begin analysis</p>
+          <div className="rounded-[32px] border border-dashed border-white/10 bg-slate-950/45 px-6 py-16 text-center shadow-[0_24px_80px_-50px_rgba(3,7,18,1)] backdrop-blur-xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
+              <Search className="h-7 w-7 text-slate-400" />
+            </div>
+            <h2 className="mt-5 text-2xl font-bold tracking-[-0.03em] text-white">Search for an item to begin</h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">
+              Pick an item name, choose whether you are buying or selling, and the dashboard will surface the execution-adjusted recommendation first.
+            </p>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function HeaderStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function GuidancePanel({ guidance }: { guidance: GuidanceCopy }) {
+  return (
+    <div className={cn(
+      'rounded-[26px] border p-5',
+      guidance.tone === 'positive' && 'border-emerald-400/20 bg-emerald-400/10',
+      guidance.tone === 'warning' && 'border-amber-400/20 bg-amber-400/10',
+      guidance.tone === 'danger' && 'border-rose-400/20 bg-rose-400/10'
+    )}>
+      <div className="flex items-start gap-4">
+        <div className={cn(
+          'rounded-2xl p-3',
+          guidance.tone === 'positive' && 'bg-emerald-400/15 text-emerald-100',
+          guidance.tone === 'warning' && 'bg-amber-400/15 text-amber-100',
+          guidance.tone === 'danger' && 'bg-rose-400/15 text-rose-100'
+        )}>
+          {guidance.tone === 'positive'
+            ? <CheckCircle2 className="h-5 w-5" />
+            : guidance.tone === 'warning'
+              ? <PauseCircle className="h-5 w-5" />
+              : <AlertTriangle className="h-5 w-5" />
+          }
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">What to do next</p>
+          <p className="text-xl font-semibold text-white">{guidance.headline}</p>
+          <p className="text-sm leading-6 text-slate-200">{guidance.detail}</p>
+          <p className="text-sm leading-6 text-slate-400">{guidance.outcome}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompactStat({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className="mt-2 text-base font-semibold text-white">{value}</p>
+      <p className="mt-1 text-xs text-slate-400">{note}</p>
+    </div>
+  );
+}
+
+function PriceLine({
+  label,
+  value,
+  prefix = '',
+  emphasis = false
+}: {
+  label: string;
+  value: number;
+  prefix?: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className={cn(
+      'flex items-center justify-between rounded-2xl border p-4',
+      emphasis ? 'border-cyan-400/20 bg-cyan-400/8' : 'border-white/10 bg-white/[0.04]'
+    )}>
+      <p className="text-sm text-slate-300">{label}</p>
+      <p className={cn('text-right font-semibold', emphasis ? 'text-white' : 'text-slate-200')}>
+        <span className="font-mono text-lg">{prefix}{formatGp(value)}</span>
+        <span className="ml-1 text-xs uppercase tracking-[0.2em] text-slate-500">gp</span>
+      </p>
+    </div>
+  );
+}
+
+function ExecutionMetric({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className="text-lg font-semibold text-white">{value}</p>
+      <p className="text-xs text-slate-400">{note}</p>
+    </div>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  description
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p>
+      <h3 className="text-2xl font-black tracking-[-0.04em] text-white">{title}</h3>
+      <p className="max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
+    </div>
+  );
+}
+
+function InsightRow({ title, value, detail }: { title: string; value: string; detail: string }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[22px] border border-white/10 bg-white/[0.04] p-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-400">{detail}</p>
+      </div>
+      <div className="text-sm font-semibold text-cyan-200 sm:text-right">{value}</div>
+    </div>
+  );
+}
+
+function ReasonPill({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-4 text-sm leading-6 text-slate-300">
+      {children}
+    </div>
+  );
+}
+
+function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1">
+      {children}
+    </span>
+  );
+}
+
+function EmptyAnalysisState() {
+  return (
+    <div className="flex min-h-[240px] items-center justify-center rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 text-center text-sm leading-6 text-slate-400">
+      Pulling pricing and time-series data for this item will populate the recommendation and execution panels here.
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  subValue,
+  icon: Icon,
+  trend
+}: {
+  label: string;
+  value: string;
+  subValue: string;
+  icon: React.ElementType;
+  trend: 'up' | 'down' | 'neutral';
+}) {
+  return (
+    <div className="rounded-[26px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_20px_70px_-45px_rgba(3,7,18,1)] backdrop-blur-xl transition-colors hover:bg-white/[0.06]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</p>
+          <div className="mt-3 text-3xl font-black tracking-[-0.04em] text-white">{value}</div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-2.5">
+          <Icon className="h-4 w-4 text-slate-300" />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-2 text-sm">
+        {trend === 'up' && <TrendingUp className="h-4 w-4 text-emerald-300" />}
+        {trend === 'down' && <TrendingDown className="h-4 w-4 text-rose-300" />}
+        <span className={cn(
+          trend === 'up' && 'text-emerald-300',
+          trend === 'down' && 'text-rose-300',
+          trend === 'neutral' && 'text-slate-400'
+        )}>
+          {subValue}
+        </span>
       </div>
     </div>
   );
@@ -377,99 +704,126 @@ function formatItems(value: number) {
   return Math.round(value).toLocaleString();
 }
 
-function getGuidanceCopy(analysis: StrategyResult, mode: "Buying" | "Selling"): GuidanceCopy {
-  if (mode === "Buying") {
+function formatDeltaText(value: number) {
+  if (value === 0) return 'At market';
+  return `${Math.abs(value).toFixed(1)}% ${value < 0 ? 'below market' : 'above market'}`;
+}
+
+function getPriceDeltaTone(value: number) {
+  if (value < 0) return 'bg-emerald-400/15 text-emerald-100 border border-emerald-400/20';
+  if (value > 0) return 'bg-amber-400/15 text-amber-100 border border-amber-400/20';
+  return 'bg-white/10 text-slate-200 border border-white/10';
+}
+
+function getDecisionSurface(color?: StrategyResult['color']) {
+  if (color === 'green') return 'border-emerald-400/20 bg-gradient-to-br from-emerald-500/14 via-slate-950/85 to-cyan-500/10';
+  if (color === 'red') return 'border-rose-400/20 bg-gradient-to-br from-rose-500/14 via-slate-950/85 to-orange-500/8';
+  return 'border-amber-400/20 bg-gradient-to-br from-amber-400/14 via-slate-950/85 to-cyan-500/8';
+}
+
+function getSubtextTone(color?: StrategyResult['color']) {
+  if (color === 'green') return 'bg-emerald-400/15 text-emerald-100';
+  if (color === 'red') return 'bg-rose-400/15 text-rose-100';
+  return 'bg-amber-400/15 text-amber-100';
+}
+
+function getRsiLabel(rsi: number) {
+  if (rsi < 30) return 'Oversold';
+  if (rsi > 70) return 'Overbought';
+  if (rsi > 55) return 'Positive';
+  if (rsi < 45) return 'Soft';
+  return 'Balanced';
+}
+
+function getVolatilityLabel(volatility: number) {
+  if (volatility > 0.08) return 'High risk';
+  if (volatility > 0.04) return 'Active';
+  if (volatility > 0.02) return 'Moderate';
+  return 'Stable';
+}
+
+function getLiquiditySummary(state: StrategyResult['metrics']['liquidityState']) {
+  switch (state) {
+    case 'High':
+      return 'Deep enough for tighter execution assumptions';
+    case 'Medium':
+      return 'Tradable, but raw prints still need caution';
+    case 'Low':
+      return 'Execution can move more than the last print suggests';
+    case 'Illiquid':
+    default:
+      return 'Thin market, patience matters';
+  }
+}
+
+function getGuidanceCopy(analysis: StrategyResult, mode: TradeMode): GuidanceCopy {
+  if (mode === 'Buying') {
     switch (analysis.decision) {
-      case "SCREAMING BUY":
-      case "STRONG BUY":
-      case "BUY":
-      case "BUY DIP":
-      case "MOMENTUM BUY":
-      case "ACCUMULATE":
+      case 'SCREAMING BUY':
+      case 'STRONG BUY':
+      case 'BUY':
+      case 'BUY DIP':
+      case 'MOMENTUM BUY':
+      case 'ACCUMULATE':
         return {
-          headline: `Buy this item near ${formatGp(analysis.suggestedPrice)} gp.`,
+          headline: `Work bids near ${formatGp(analysis.suggestedPrice)} gp.`,
           detail: analysis.suggestedPrice >= analysis.metrics.instantBuyPrice
-            ? "The setup is strong enough to pay close to the current market."
-            : "Use a limit bid instead of insta-buying so you keep the margin realistic.",
-          outcome: `If filled, your current modeled post-tax spread is ${analysis.metrics.flipMarginAfterTax >= 0 ? "+" : ""}${formatGp(analysis.metrics.flipMarginAfterTax)} gp.`,
-          tone: "positive"
+            ? 'The setup is strong enough that paying near the modeled instant level is still reasonable.'
+            : 'Let sellers come to you. The edge improves if you avoid paying the full modeled instant price.',
+          outcome: `Current modeled post-tax edge is ${analysis.metrics.flipMarginAfterTax >= 0 ? '+' : ''}${formatGp(analysis.metrics.flipMarginAfterTax)} gp.`,
+          tone: 'positive'
         };
-      case "WATCH":
+      case 'WATCH':
         return {
-          headline: `Do not chase this item. Place a patient buy offer around ${formatGp(analysis.suggestedPrice)} gp.`,
-          detail: "The setup is not strong enough to justify paying market right now.",
-          outcome: "Leave the order in and only buy if sellers come down to you.",
-          tone: "warning"
+          headline: `Queue a patient bid around ${formatGp(analysis.suggestedPrice)} gp.`,
+          detail: 'There is not enough strength here to justify chasing the market right now.',
+          outcome: 'Keep the order passive and only take the fill if the market comes back to you.',
+          tone: 'warning'
         };
-      case "WAIT":
+      case 'WAIT':
       default:
         return {
-          headline: "Wait before buying this item.",
+          headline: 'Wait for a cleaner entry.',
           detail: analysis.metrics.flipMarginAfterTax <= 0
-            ? "The live spread is too thin after GE tax, so the trade is not attractive yet."
-            : "The current entry is stretched. Let price come back to a better level first.",
-          outcome: `Best current patience price: about ${formatGp(analysis.suggestedPrice)} gp.`,
-          tone: "danger"
+            ? 'After tax and slippage, the current spread is not attractive enough to enter.'
+            : 'The market is stretched relative to the quality of the setup. A better pullback would improve the risk.',
+          outcome: `If you want to stay involved, patience starts around ${formatGp(analysis.suggestedPrice)} gp.`,
+          tone: 'danger'
         };
     }
   }
 
   switch (analysis.decision) {
-    case "PANIC SELL":
-    case "CUT LOSSES":
+    case 'PANIC SELL':
+    case 'CUT LOSSES':
       return {
-        headline: `Sell now and take the fast exit near ${formatGp(analysis.suggestedPrice)} gp.`,
-        detail: "Price action is deteriorating, so preserving liquidity matters more than squeezing extra margin.",
-        outcome: `Expected net after tax at the current instant sell is ${formatGp(analysis.metrics.netReturn)} gp.`,
-        tone: "danger"
+        headline: `Exit quickly near ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: 'The trend has weakened enough that preserving liquidity now matters more than squeezing out a better ask.',
+        outcome: `The current modeled instant exit nets about ${formatGp(analysis.metrics.netReturn)} gp after tax.`,
+        tone: 'danger'
       };
-    case "MANIC SELL":
-    case "SELL NOW":
+    case 'MANIC SELL':
+    case 'SELL NOW':
       return {
-        headline: `Sell this item now, but list slightly above market at ${formatGp(analysis.suggestedPrice)} gp.`,
-        detail: "Momentum is favorable enough to ask for a bit more instead of dumping instantly.",
-        outcome: "Take profit while buyers are still paying up.",
-        tone: "positive"
+        headline: `Sell into strength around ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: 'Momentum is still supportive, so you can ask above the instant sell instead of dumping immediately.',
+        outcome: 'This is a take-profit setup while buyers are still active.',
+        tone: 'positive'
       };
-    case "RIDE TREND":
+    case 'RIDE TREND':
       return {
-        headline: `Hold for now and list higher around ${formatGp(analysis.suggestedPrice)} gp.`,
-        detail: "Trend is still moving up, so there is a case for asking above the current sell price.",
-        outcome: "This is a hold-then-sell-higher setup, not an immediate dump.",
-        tone: "positive"
+        headline: `Hold and work a higher ask near ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: 'The uptrend is still intact enough that forcing an instant exit would leave money on the table.',
+        outcome: 'Let the trend work for you, then ask into strength rather than rushing the exit.',
+        tone: 'positive'
       };
-    case "LIST":
+    case 'LIST':
     default:
       return {
-        headline: `List this item passively around ${formatGp(analysis.suggestedPrice)} gp.`,
-        detail: "There is no urgent sell signal, but you can keep an offer in the market.",
-        outcome: "Wait for buyers to meet your ask instead of insta-selling.",
-        tone: "warning"
+        headline: `List passively around ${formatGp(analysis.suggestedPrice)} gp.`,
+        detail: 'There is no urgent sell signal, but the market still supports keeping an offer live.',
+        outcome: 'Wait for buyers to meet the ask instead of defaulting to an instant sell.',
+        tone: 'warning'
       };
   }
-}
-
-function MetricCard({ label, value, subValue, icon: Icon, trend }: { label: string, value: string, subValue: string, icon: React.ElementType, trend: "up" | "down" | "neutral" }) {
-  return (
-    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 hover:bg-neutral-800 transition-colors">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">{label}</span>
-        <Icon className="w-4 h-4 text-neutral-500" />
-      </div>
-      <div className="text-2xl font-mono text-white mb-1">
-        {value}
-      </div>
-      <div className="flex items-center gap-2">
-        {trend === "up" && <TrendingUp className="w-3 h-3 text-emerald-400" />}
-        {trend === "down" && <TrendingDown className="w-3 h-3 text-red-400" />}
-        <span className={cn(
-          "text-xs",
-          trend === "up" ? "text-emerald-400" :
-            trend === "down" ? "text-red-400" : "text-neutral-500"
-        )}>
-          {subValue}
-        </span>
-      </div>
-    </div>
-  )
 }
