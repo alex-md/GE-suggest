@@ -105,48 +105,45 @@ export default function App() {
   const showSearchTray = query.length >= 2 && query !== selectedItem?.name;
 
   return (
-    <div className="min-h-screen text-slate-100">
+    <div className="min-h-screen pt-4 pb-12">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="grid gap-4 rounded-[28px] border border-white/10 bg-white/5 p-5 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.9)] backdrop-blur-xl lg:grid-cols-[1.35fr_0.65fr] lg:p-6">
+        <header className="grid gap-6 p-6 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200">
+            <div className="inline-flex items-center gap-2 rounded-md bg-secondary/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-secondary-foreground border border-border/80 shadow-sm backdrop-blur-md">
               Grand Exchange Strategy Desk
             </div>
             <div className="space-y-2">
-              <h1 className="max-w-2xl text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl">
+              <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
                 OSRS Flipper
               </h1>
-              <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+              <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
                 Cleaner signals, liquidity-aware execution, and a decision-first dashboard for fast reads.
               </p>
             </div>
           </div>
 
-          <div className="grid gap-3 rounded-[24px] border border-white/10 bg-slate-950/40 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Data Status</p>
-              <div className="inline-flex items-center gap-2 text-sm text-slate-300">
-                <span className={cn('h-2.5 w-2.5 rounded-full', loadingItems ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400')} />
-                {loadingItems ? 'Syncing' : 'Ready'}
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-              <HeaderStat label="Live quotes" value="Instant + passive" />
-              <HeaderStat label="Decision model" value="Trend + tax + depth" />
-              <HeaderStat label="Depth check" value="Abs fills weighted" />
-            </div>
+          <div className="inline-flex justify-end gap-2 px-3 py-1.5 text-sm font-medium text-foreground">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                loadingItems
+                  ? 'bg-amber-500 animate-pulse outline outline-2 outline-amber-500/20'
+                  : 'bg-emerald-500 outline outline-2 outline-emerald-500/20'
+              )}
+            />
+            {loadingItems ? 'Syncing...' : 'Ready'}
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="relative rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_-38px_rgba(8,15,33,0.95)] backdrop-blur-xl">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Find an item</p>
+        <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="relative macos-window p-6 flex flex-col gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Find an item</p>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search an item name..."
-                className="h-14 w-full rounded-2xl border border-white/10 bg-white/5 pl-12 pr-12 text-base text-white outline-none transition-all placeholder:text-slate-500 focus:border-cyan-400/40 focus:bg-white/[0.07] focus:ring-4 focus:ring-cyan-400/10"
+                className="h-10 w-full rounded-md border border-input bg-background/50 pl-10 pr-10 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:border-primary transition-all backdrop-blur-sm"
                 value={query}
                 onChange={event => setQuery(event.target.value)}
               />
@@ -157,45 +154,45 @@ export default function App() {
                     setSelectedItem(null);
                     setAnalysis(null);
                   }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
 
             {showSearchTray && (
-              <div className="mt-4 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/90 shadow-[0_24px_80px_-48px_rgba(3,7,18,1)] backdrop-blur-2xl">
-                <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <div className="absolute top-[88px] left-6 right-6 z-50 overflow-hidden rounded-xl border border-border bg-popover/95 shadow-2xl backdrop-blur-xl">
+                <div className="flex items-center justify-between gap-3 border-b border-border/80 bg-muted/50 px-4 py-2.5">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     {searchResults.length > 0 ? 'Matching items' : 'No matches yet'}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-[10px] text-muted-foreground">
                     {searchResults.length > 0 ? `${searchResults.length} shown` : 'Try a broader search'}
                   </p>
                 </div>
 
                 {searchResults.length > 0 ? (
-                  <div className="max-h-[min(24rem,calc(100vh-18rem))] overflow-y-auto">
+                  <div className="max-h-[min(24rem,calc(100vh-18rem))] overflow-y-auto p-1">
                     {searchResults.map(item => (
                       <button
                         key={item.id}
-                        className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.06]"
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                         onClick={() => handleSelect(item)}
                       >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border/80 bg-background/50 shadow-sm">
                           <img
                             src={`https://oldschool.runescape.wiki/images/${item.icon.replace(/ /g, '_')}`}
                             alt=""
-                            className="h-6 w-6 object-contain"
+                            className="h-5 w-5 object-contain drop-shadow-sm"
                             onError={event => {
                               event.currentTarget.style.display = 'none';
                             }}
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                          <p className="text-xs text-slate-400">
+                          <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">
                             GE limit {formatItems(item.limit)} every 4 hours
                           </p>
                         </div>
@@ -203,7 +200,7 @@ export default function App() {
                     ))}
                   </div>
                 ) : (
-                  <div className="px-4 py-6 text-sm text-slate-400">
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                     No items matched that search. Try fewer letters or a broader name.
                   </div>
                 )}
@@ -211,30 +208,30 @@ export default function App() {
             )}
           </div>
 
-          <div className="rounded-[28px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_18px_60px_-38px_rgba(8,15,33,0.95)] backdrop-blur-xl">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Trading mode</p>
-            <div className="grid grid-cols-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1">
+          <div className="macos-window p-6 flex flex-col gap-3">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Trading mode</p>
+            <div className="grid grid-cols-2 rounded-lg border border-border/80 bg-secondary/30 p-1 shadow-inner backdrop-blur-md">
               {(['Buying', 'Selling'] as TradeMode[]).map(option => (
                 <button
                   key={option}
                   onClick={() => handleModeToggle(option)}
                   className={cn(
-                    'rounded-[14px] px-4 py-3 text-sm font-semibold transition-all',
+                    'rounded-md px-3 py-1.5 text-sm font-medium transition-all',
                     mode === option
-                      ? 'bg-white text-slate-950 shadow-lg shadow-white/10'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'bg-background text-foreground shadow-sm ring-1 ring-border/80'
+                      : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
                   )}
                 >
                   {option}
                 </button>
               ))}
             </div>
-            <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-cyan-400/10 via-transparent to-emerald-400/10 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Current lens</p>
-              <p className="text-lg font-semibold text-white">
+            <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-border/80 bg-muted/20 p-4">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Current lens</p>
+              <p className="text-sm font-semibold text-foreground">
                 {mode === 'Buying' ? 'Prioritize entry price and tax-clearing margin.' : 'Prioritize exit quality and liquidity.'}
               </p>
-              <p className="text-sm leading-6 text-slate-300">
+              <p className="text-xs leading-5 text-muted-foreground">
                 {mode === 'Buying'
                   ? 'The model leans on trend, spread, and market depth to decide whether to bid patiently or pay up.'
                   : 'The model weighs trend persistence against depth so thin items do not look easier to unload than they really are.'}
@@ -244,40 +241,40 @@ export default function App() {
         </section>
 
         {selectedItem && (
-          <div className="grid gap-4">
-            <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="grid gap-6">
+            <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
               <div className={cn(
-                'rounded-[32px] border p-6 shadow-[0_28px_90px_-48px_rgba(3,7,18,1)] backdrop-blur-xl transition-all',
-                loadingAnalysis ? 'border-white/10 bg-white/[0.04] opacity-60' : getDecisionSurface(analysis?.color)
+                'macos-window p-8 transition-all relative overflow-hidden',
+                loadingAnalysis ? 'opacity-60' : getDecisionSurface(analysis?.color)
               )}>
                 {loadingAnalysis ? (
-                  <div className="flex h-full min-h-[260px] items-center justify-center gap-3 text-slate-300">
-                    <Activity className="h-6 w-6 animate-spin" />
-                    <span>Refreshing market read...</span>
+                  <div className="flex h-full min-h-[260px] items-center justify-center gap-3 text-muted-foreground">
+                    <Activity className="h-5 w-5 animate-spin" />
+                    <span className="text-sm font-medium">Refreshing market read...</span>
                   </div>
                 ) : analysis ? (
-                  <div className="space-y-5">
-                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-4 lg:max-w-[70%]">
+                  <div className="space-y-6 relative z-10">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="space-y-5 lg:max-w-[70%]">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/5 shadow-inner">
+                          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-background border border-border shadow-sm">
                             <img
                               src={`https://oldschool.runescape.wiki/images/${selectedItem.icon.replace(/ /g, '_')}`}
                               alt=""
-                              className="h-10 w-10 object-contain"
+                              className="h-8 w-8 object-contain drop-shadow-sm"
                               onError={event => {
                                 event.currentTarget.style.display = 'none';
                               }}
                             />
                           </div>
                           <div className="space-y-1">
-                            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                               {mode === 'Buying' ? 'Buy signal' : 'Sell signal'}
                             </p>
-                            <h2 className="text-3xl font-black tracking-[-0.04em] text-white sm:text-4xl">
+                            <h2 className="text-3xl font-bold tracking-tight text-foreground">
                               {selectedItem.name}
                             </h2>
-                            <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                            <div className="flex flex-wrap gap-2 text-xs">
                               <Tag>{analysis.metrics.liquidityState}</Tag>
                               <Tag>{formatItems(selectedItem.limit)} / 4h limit</Tag>
                               <Tag>{formatItems(analysis.metrics.dailyVolumeItems)} fills/day</Tag>
@@ -286,42 +283,38 @@ export default function App() {
                         </div>
 
                         <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.16em] text-white">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-md border border-border/80 bg-background/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-foreground shadow-sm backdrop-blur-sm">
                               {analysis.decision}
                             </span>
                             <span className={cn(
-                              'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+                              'rounded-md px-2.5 py-1 text-[11px] font-medium tracking-wider shadow-sm border',
                               getSubtextTone(analysis.color)
                             )}>
                               {analysis.subtext}
                             </span>
                           </div>
-                          <p className="text-xl font-semibold leading-8 text-white">
+                          <p className="text-lg font-semibold leading-tight text-foreground">
                             {guidance?.headline ?? analysis.decision}
                           </p>
-                          <p className="max-w-3xl text-sm leading-6 text-slate-200 sm:text-base">
+                          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                             {guidance?.detail ?? analysis.explanation}
                           </p>
                         </div>
                       </div>
 
-                      <div className="grid min-w-[220px] gap-3 rounded-[24px] border border-white/10 bg-slate-950/45 p-4">
+                      <div className="flex min-w-[200px] flex-col gap-3 macos-panel p-4 mt-6 lg:mt-0">
                         <CompactStat
                           label="Instant buy"
                           value={`${formatGp(analysis.metrics.instantBuyPrice)} gp`}
-                          note={`Last print ${formatGp(analysis.metrics.rawInstantBuyPrice)} gp`}
+                          note={`Last print ${formatGp(analysis.metrics.rawInstantBuyPrice)}`}
                         />
                         <CompactStat
                           label="Instant sell"
                           value={`${formatGp(analysis.metrics.instantSellPrice)} gp`}
-                          note={`Last print ${formatGp(analysis.metrics.rawInstantSellPrice)} gp`}
+                          note={`Last print ${formatGp(analysis.metrics.rawInstantSellPrice)}`}
                         />
-                        <CompactStat
-                          label="Quick read"
-                          value={analysis.metrics.liquidityState}
-                          note={`${getRsiLabel(analysis.metrics.rsi)} momentum`}
-                        />
+
                       </div>
                     </div>
                   </div>
@@ -330,34 +323,34 @@ export default function App() {
                 )}
               </div>
 
-              <div className="rounded-[32px] border border-white/10 bg-slate-950/60 p-6 shadow-[0_28px_90px_-48px_rgba(3,7,18,1)] backdrop-blur-xl">
+              <div className="macos-window p-8">
                 {analysis ? (
-                  <div className="space-y-5">
+                  <div className="space-y-6">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Quick prices</p>
-                      <h3 className="text-2xl font-black tracking-[-0.04em] text-white">
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Quick prices</p>
+                      <h3 className="text-2xl font-bold tracking-tight text-foreground">
                         {mode === 'Buying' ? 'Entry and exit levels' : 'Exit and re-entry levels'}
                       </h3>
                     </div>
 
-                    <div className="rounded-[28px] border border-emerald-400/20 bg-gradient-to-br from-emerald-400/14 via-emerald-400/6 to-cyan-400/12 p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100/70">
+                    <div className="macos-panel p-5 bg-gradient-to-br from-green-500/10 via-transparent to-transparent border-green-500/40">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-green-400">
                         Best price to use now
                       </p>
-                      <div className="mt-2 flex items-end justify-between gap-4">
+                      <div className="mt-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                         <div>
-                          <div className="text-4xl font-black tracking-[-0.05em] text-white">
+                          <div className="text-4xl font-bold tracking-tight text-foreground">
                             {formatGp(analysis.suggestedPrice)}
-                            <span className="ml-2 text-lg font-semibold text-emerald-200/70">gp</span>
+                            <span className="ml-2 text-lg font-medium text-muted-foreground">gp</span>
                           </div>
-                          <p className="mt-2 max-w-xs text-sm leading-6 text-emerald-50/80">
+                          <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted-foreground">
                             {mode === 'Buying'
                               ? 'Use this as the buy level if you want a realistic fill without overpaying.'
                               : 'Use this as the sell level if you want a realistic exit without dumping.'}
                           </p>
                         </div>
                         <div className={cn(
-                          'rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]',
+                          'rounded-md px-2.5 py-1 text-[11px] font-medium tracking-wider whitespace-nowrap self-start sm:self-auto border',
                           priceDeltaTone
                         )}>
                           {formatDeltaText(suggestedDeltaPct)}
@@ -365,7 +358,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid gap-3">
+                    <div className="flex flex-col gap-2">
                       <PriceLine
                         label="Instant buy"
                         value={analysis.metrics.instantBuyPrice}
@@ -388,9 +381,9 @@ export default function App() {
                       />
                     </div>
 
-                    <div className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">At a glance</p>
-                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="macos-panel p-5 bg-muted/30">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">At a glance</p>
+                      <div className="mt-3 grid gap-4 sm:grid-cols-2">
                         <ExecutionMetric
                           label="Spread"
                           value={`${formatGp(analysis.metrics.spread)} gp`}
@@ -413,7 +406,7 @@ export default function App() {
             </section>
 
             {analysis && (
-              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
                   label={mode === 'Buying' ? 'Value' : 'Tax'}
                   value={mode === 'Buying' ? `${analysis.metrics.discountPct.toFixed(1)}%` : `${formatGp(analysis.metrics.taxBasis)} gp`}
@@ -431,7 +424,7 @@ export default function App() {
                 <MetricCard
                   label="Depth"
                   value={formatItems(analysis.metrics.dailyVolumeItems)}
-                  subValue={`${analysis.metrics.liquidityState} • ${analysis.metrics.fillsPerLimit.toFixed(1)}x/day`}
+                  subValue={`${analysis.metrics.liquidityState} • ${analysis.metrics.fillsPerLimit.toFixed(1)}x GE limit per day`}
                   icon={BarChart3}
                   trend={analysis.metrics.liquidityState === 'High' ? 'up' : analysis.metrics.liquidityState === 'Illiquid' ? 'down' : 'neutral'}
                 />
@@ -446,18 +439,6 @@ export default function App() {
             )}
           </div>
         )}
-
-        {!selectedItem && !loadingItems && (
-          <div className="rounded-[32px] border border-dashed border-white/10 bg-slate-950/45 px-6 py-16 text-center shadow-[0_24px_80px_-50px_rgba(3,7,18,1)] backdrop-blur-xl">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
-              <Search className="h-7 w-7 text-slate-400" />
-            </div>
-            <h2 className="mt-5 text-2xl font-bold tracking-[-0.03em] text-white">Search for an item to begin</h2>
-            <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">
-              Pick an item name, choose whether you are buying or selling, and the dashboard will surface the execution-adjusted recommendation first.
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -465,19 +446,19 @@ export default function App() {
 
 function HeaderStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className="mt-2 text-sm font-semibold text-white">{value}</p>
+    <div className="flex flex-col gap-1 p-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-sm font-medium text-foreground">{value}</p>
     </div>
   );
 }
 
 function CompactStat({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-400">{note}</p>
+    <div className="macos-panel p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
     </div>
   );
 }
@@ -495,13 +476,13 @@ function PriceLine({
 }) {
   return (
     <div className={cn(
-      'flex items-center justify-between rounded-2xl border p-4',
-      emphasis ? 'border-cyan-400/20 bg-cyan-400/8' : 'border-white/10 bg-white/[0.04]'
+      'flex items-center justify-between p-3 macos-panel',
+      emphasis ? 'bg-primary/10 border-primary/20' : ''
     )}>
-      <p className="text-sm text-slate-300">{label}</p>
-      <p className={cn('text-right font-semibold', emphasis ? 'text-white' : 'text-slate-200')}>
-        <span className="font-mono text-lg">{prefix}{formatGp(value)}</span>
-        <span className="ml-1 text-xs uppercase tracking-[0.2em] text-slate-500">gp</span>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className={cn('text-right', emphasis ? 'font-semibold text-foreground' : 'text-foreground/80')}>
+        <span className="font-mono">{prefix}{formatGp(value)}</span>
+        <span className="ml-1 text-xs text-muted-foreground">gp</span>
       </p>
     </div>
   );
@@ -509,17 +490,17 @@ function PriceLine({
 
 function ExecutionMetric({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className="text-lg font-semibold text-white">{value}</p>
-      <p className="text-xs text-slate-400">{note}</p>
+    <div className="space-y-1 p-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-base font-medium text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground">{note}</p>
     </div>
   );
 }
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1">
+    <span className="rounded-md bg-secondary/80 px-2 py-0.5 text-[11px] font-medium text-secondary-foreground border border-border/80">
       {children}
     </span>
   );
@@ -527,8 +508,8 @@ function Tag({ children }: { children: React.ReactNode }) {
 
 function EmptyAnalysisState() {
   return (
-    <div className="flex min-h-[240px] items-center justify-center rounded-[24px] border border-dashed border-white/10 bg-white/[0.03] px-6 text-center text-sm leading-6 text-slate-400">
-      Pulling pricing and time-series data for this item will populate the recommendation and execution panels here.
+    <div className="flex min-h-[240px] items-center justify-center p-6 text-center text-sm text-muted-foreground">
+      Select an item to view execution-adjusted recommendations and pricing data.
     </div>
   );
 }
@@ -547,23 +528,23 @@ function MetricCard({
   trend: 'up' | 'down' | 'neutral';
 }) {
   return (
-    <div className="rounded-[26px] border border-white/10 bg-slate-950/55 p-5 shadow-[0_20px_70px_-45px_rgba(3,7,18,1)] backdrop-blur-xl transition-colors hover:bg-white/[0.06]">
+    <div className="macos-panel p-4 flex flex-col justify-between">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{label}</p>
-          <div className="mt-3 text-3xl font-black tracking-[-0.04em] text-white">{value}</div>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+          <div className="mt-1 text-2xl font-semibold text-foreground">{value}</div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-2.5">
-          <Icon className="h-4 w-4 text-slate-300" />
+        <div className="rounded-md bg-secondary/50 p-2">
+          <Icon className="h-4 w-4 text-secondary-foreground/70" />
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-2 text-sm">
-        {trend === 'up' && <TrendingUp className="h-4 w-4 text-emerald-300" />}
-        {trend === 'down' && <TrendingDown className="h-4 w-4 text-rose-300" />}
+      <div className="mt-3 flex items-center gap-1.5 text-xs font-medium">
+        {trend === 'up' && <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />}
+        {trend === 'down' && <TrendingDown className="h-3.5 w-3.5 text-rose-400" />}
         <span className={cn(
-          trend === 'up' && 'text-emerald-300',
-          trend === 'down' && 'text-rose-300',
-          trend === 'neutral' && 'text-slate-400'
+          trend === 'up' && 'text-emerald-400',
+          trend === 'down' && 'text-rose-400',
+          trend === 'neutral' && 'text-muted-foreground'
         )}>
           {subValue}
         </span>
@@ -586,21 +567,21 @@ function formatDeltaText(value: number) {
 }
 
 function getPriceDeltaTone(value: number) {
-  if (value < 0) return 'bg-emerald-400/15 text-emerald-100 border border-emerald-400/20';
-  if (value > 0) return 'bg-amber-400/15 text-amber-100 border border-amber-400/20';
-  return 'bg-white/10 text-slate-200 border border-white/10';
+  if (value < 0) return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
+  if (value > 0) return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
+  return 'bg-secondary/50 text-secondary-foreground border-border/80';
 }
 
 function getDecisionSurface(color?: StrategyResult['color']) {
-  if (color === 'green') return 'border-emerald-400/20 bg-gradient-to-br from-emerald-500/14 via-slate-950/85 to-cyan-500/10';
-  if (color === 'red') return 'border-rose-400/20 bg-gradient-to-br from-rose-500/14 via-slate-950/85 to-orange-500/8';
-  return 'border-amber-400/20 bg-gradient-to-br from-amber-400/14 via-slate-950/85 to-cyan-500/8';
+  if (color === 'green') return 'bg-emerald-500/5 border-emerald-500/40 shadow-[0_0_40px_-15px_rgba(16,185,129,0.1)]';
+  if (color === 'red') return 'bg-rose-500/5 border-rose-500/40 shadow-[0_0_40px_-15px_rgba(244,63,94,0.1)]';
+  return 'bg-amber-500/5 border-amber-500/40 shadow-[0_0_40px_-15px_rgba(245,158,11,0.1)]';
 }
 
 function getSubtextTone(color?: StrategyResult['color']) {
-  if (color === 'green') return 'bg-emerald-400/15 text-emerald-100';
-  if (color === 'red') return 'bg-rose-400/15 text-rose-100';
-  return 'bg-amber-400/15 text-amber-100';
+  if (color === 'green') return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
+  if (color === 'red') return 'bg-rose-500/10 text-rose-400 border-rose-500/40';
+  return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
 }
 
 function getRsiLabel(rsi: number) {
