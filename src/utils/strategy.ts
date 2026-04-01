@@ -123,6 +123,7 @@ function getSellPatience(decision: string, liquidityState: StrategyResult["metri
     const basePatience: Record<string, number> = {
         "PANIC SELL": 0.08,
         "CUT LOSSES": 0.12,
+        "HOLD": 0.72,
         "MANIC SELL": 0.78,
         "SELL NOW": 0.7,
         "RIDE TREND": 0.9,
@@ -191,6 +192,7 @@ export function analyzeItemData(
     const isStable = volatility < 0.02;
     const isBreakout = vsAveragePct > 10;
     const isCrash = vsAveragePct < -10;
+    const isSoftSelloff = vsAveragePct < -4;
     const hasPositiveFlipEdge = flipMarginAfterTax > 0;
 
     if (liquidityState === "Illiquid") {
@@ -281,7 +283,7 @@ export function analyzeItemData(
             decision = "PANIC SELL";
             subtext = "Crash";
             reasons.push(`Price is down ${Math.abs(vsAveragePct).toFixed(1)}% vs the 7d average`);
-            color = "red";
+            color = "green";
         }
         else if ((isMomentum || isRising) && rsi14 <= 75) {
             decision = "RIDE TREND";
@@ -295,17 +297,23 @@ export function analyzeItemData(
             reasons.push("Momentum remains elevated but trend follow-through is fading");
             color = "green";
         }
-        else if (!isRising && (isOversold || isAccumulation)) {
+        else if (!isRising && isOversold && isSoftSelloff && liquidityState !== "High") {
             decision = "CUT LOSSES";
             subtext = "Falling";
-            reasons.push("Trend has weakened and the price action is not recovering");
+            reasons.push("Price action is weak enough that a faster exit is safer than holding out for a better ask");
+            color = "green";
+        }
+        else if (!isRising && (isOversold || isAccumulation || (isStable && vsAveragePct < 2))) {
+            decision = "HOLD";
+            subtext = "Soft";
+            reasons.push("Momentum is soft enough that holding is favored over selling into weakness");
             color = "red";
         }
         else {
             decision = "LIST";
             subtext = "Neutral";
             reasons.push("List inside the spread and make buyers meet your price");
-            color = "yellow";
+            color = "green";
         }
     }
 
@@ -355,6 +363,8 @@ export function analyzeItemData(
 
         if (decision === "PANIC SELL" || decision === "CUT LOSSES") {
             suggestedPriceLabel = "Fast Exit";
+        } else if (decision === "HOLD") {
+            suggestedPriceLabel = "Patient Ask";
         } else if (decision === "RIDE TREND") {
             suggestedPriceLabel = "Profit Ask";
         } else {

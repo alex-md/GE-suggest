@@ -101,7 +101,7 @@ export default function App() {
     : 0;
 
   const guidance = analysis ? getGuidanceCopy(analysis, mode) : null;
-  const priceDeltaTone = getPriceDeltaTone(suggestedDeltaPct);
+  const priceDeltaTone = getPriceDeltaTone(suggestedDeltaPct, mode);
   const showSearchTray = query.length >= 2 && query !== selectedItem?.name;
 
   return (
@@ -114,10 +114,10 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-                OSRS Flipper
+                OSRS GE Assistant
               </h1>
               <p className="max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Cleaner signals, liquidity-aware execution, and a decision-first dashboard for fast reads.
+                Cleaner market reads, liquidity-aware execution, and decision-first guidance for instant or patient GE orders.
               </p>
             </div>
           </div>
@@ -229,12 +229,12 @@ export default function App() {
             <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-border/80 bg-muted/20 p-4">
               <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Current lens</p>
               <p className="text-sm font-semibold text-foreground">
-                {mode === 'Buying' ? 'Prioritize entry price and tax-clearing margin.' : 'Prioritize exit quality and liquidity.'}
+                {mode === 'Buying' ? 'Prioritize entry quality, tax, and fill odds.' : 'Prioritize exit urgency, price quality, and liquidity.'}
               </p>
               <p className="text-xs leading-5 text-muted-foreground">
                 {mode === 'Buying'
-                  ? 'The model leans on trend, spread, and market depth to decide whether to bid patiently or pay up.'
-                  : 'The model weighs trend persistence against depth so thin items do not look easier to unload than they really are.'}
+                  ? 'The model leans on trend, spread, and market depth to decide whether to bid patiently or buy instantly.'
+                  : 'The model weighs trend persistence against depth so soft items default to patient asks before forced exits.'}
               </p>
             </div>
           </div>
@@ -417,9 +417,9 @@ export default function App() {
                 <MetricCard
                   label="Momentum"
                   value={analysis.metrics.rsi.toFixed(0)}
-                  subValue={getRsiLabel(analysis.metrics.rsi)}
+                  subValue={getRsiLabel(analysis.metrics.rsi, mode)}
                   icon={Activity}
-                  trend={analysis.metrics.rsi < 30 ? 'up' : analysis.metrics.rsi > 70 ? 'down' : 'neutral'}
+                  trend={getRsiTrend(analysis.metrics.rsi, mode)}
                 />
                 <MetricCard
                   label="Depth"
@@ -559,9 +559,15 @@ function formatDeltaText(value: number) {
   return `${Math.abs(value).toFixed(1)}% ${value < 0 ? 'below market' : 'above market'}`;
 }
 
-function getPriceDeltaTone(value: number) {
-  if (value < 0) return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
-  if (value > 0) return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
+function getPriceDeltaTone(value: number, mode: TradeMode) {
+  if (mode === 'Buying') {
+    if (value < 0) return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
+    if (value > 0) return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
+    return 'bg-secondary/50 text-secondary-foreground border-border/80';
+  }
+
+  if (value > 0) return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
+  if (value < 0) return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
   return 'bg-secondary/50 text-secondary-foreground border-border/80';
 }
 
@@ -577,12 +583,32 @@ function getSubtextTone(color?: StrategyResult['color']) {
   return 'bg-amber-500/10 text-amber-400 border-amber-500/40';
 }
 
-function getRsiLabel(rsi: number) {
-  if (rsi < 30) return 'Oversold';
-  if (rsi > 70) return 'Overbought';
-  if (rsi > 55) return 'Positive';
-  if (rsi < 45) return 'Soft';
+function getRsiLabel(rsi: number, mode: TradeMode) {
+  if (mode === 'Buying') {
+    if (rsi < 30) return 'Oversold';
+    if (rsi > 70) return 'Overbought';
+    if (rsi > 55) return 'Positive';
+    if (rsi < 45) return 'Soft';
+    return 'Balanced';
+  }
+
+  if (rsi > 70) return 'Hot buyers';
+  if (rsi < 30) return 'Weak demand';
+  if (rsi > 55) return 'Sell support';
+  if (rsi < 45) return 'Hold bias';
   return 'Balanced';
+}
+
+function getRsiTrend(rsi: number, mode: TradeMode) {
+  if (mode === 'Buying') {
+    if (rsi < 30) return 'up';
+    if (rsi > 70) return 'down';
+    return 'neutral';
+  }
+
+  if (rsi > 70) return 'up';
+  if (rsi < 30) return 'down';
+  return 'neutral';
 }
 
 function getVolatilityLabel(volatility: number) {
@@ -634,8 +660,15 @@ function getGuidanceCopy(analysis: StrategyResult, mode: TradeMode): GuidanceCop
     case 'CUT LOSSES':
       return {
         headline: `Exit quickly near ${formatGp(analysis.suggestedPrice)} gp.`,
-        detail: 'The trend has weakened enough that preserving liquidity now matters more than squeezing out a better ask.',
+        detail: 'This is a genuine urgency signal. The market is weak enough that protecting the exit matters more than holding out for a better ask.',
         outcome: `The current modeled instant exit nets about ${formatGp(analysis.metrics.netReturn)} gp after tax.`,
+        tone: 'positive'
+      };
+    case 'HOLD':
+      return {
+        headline: 'Hold for now.',
+        detail: 'Selling here is not favored. Momentum is soft enough that waiting is better than accepting a weak exit.',
+        outcome: `If you must place an offer anyway, patience starts around ${formatGp(analysis.suggestedPrice)} gp.`,
         tone: 'danger'
       };
     case 'MANIC SELL':
@@ -659,7 +692,7 @@ function getGuidanceCopy(analysis: StrategyResult, mode: TradeMode): GuidanceCop
         headline: `List passively around ${formatGp(analysis.suggestedPrice)} gp.`,
         detail: 'There is no urgent sell signal, but the market still supports keeping an offer live.',
         outcome: 'Wait for buyers to meet the ask instead of defaulting to an instant sell.',
-        tone: 'warning'
+        tone: 'positive'
       };
   }
 }
