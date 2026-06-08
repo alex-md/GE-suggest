@@ -334,10 +334,19 @@ export function analyzeItemData(
         );
         const spreadBid = safeInstantSell + spread * aggression;
 
+        // Determine base boundaries
+        const minBid = decision === "WAIT" || decision === "WATCH" ? underbidFloor : safeInstantSell;
+        
+        // Invariant: The absolute ceiling for a bid is safeInstantBuy
+        const maxBid = Math.min(safeInstantBuy, Math.max(minBid, fairCap));
+        
+        // Invariant: Ensure the clamp's lower bound never exceeds its upper bound
+        const finalMinBid = Math.min(minBid, maxBid);
+
         suggestedPrice = clamp(
             Math.floor(spreadBid),
-            decision === "WAIT" || decision === "WATCH" ? underbidFloor : safeInstantSell,
-            Math.max(safeInstantSell, fairCap)
+            finalMinBid,
+            maxBid
         );
 
         if (decision === "SCREAMING BUY" || decision === "MOMENTUM BUY") {
@@ -355,10 +364,19 @@ export function analyzeItemData(
             ? Math.max(1, Math.floor(spread * 0.15))
             : 0;
 
+        // Determine base boundaries
+        const minAsk = decision === "PANIC SELL" || decision === "CUT LOSSES" ? safeInstantSell : fairFloor;
+        
+        // Invariant: The absolute floor for an ask is safeInstantSell
+        const finalMinAsk = Math.max(safeInstantSell, minAsk);
+        
+        // Invariant: Ensure the clamp's upper bound is at least as high as its lower bound
+        const maxAsk = Math.max(finalMinAsk, safeInstantBuy + reachAboveAsk);
+
         suggestedPrice = clamp(
             Math.floor(spreadAsk),
-            decision === "PANIC SELL" || decision === "CUT LOSSES" ? safeInstantSell : fairFloor,
-            safeInstantBuy + reachAboveAsk
+            finalMinAsk,
+            maxAsk
         );
 
         if (decision === "PANIC SELL" || decision === "CUT LOSSES") {
